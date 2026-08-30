@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f6f7f9;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: #16181d;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Grid input ala Excel ------------------------------------------- */
+
+.grid-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-table th,
+.grid-table td {
+  border-right: 1px solid #e3e6ea;
+  border-bottom: 1px solid #e3e6ea;
+  white-space: nowrap;
+}
+
+.grid-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #f0f2f5;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #3d4351;
+}
+
+.grid-table .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: #ffffff;
+  box-shadow: 1px 0 0 #e3e6ea;
+}
+
+.grid-table thead .sticky-col {
+  z-index: 30;
+  background: #f0f2f5;
+}
+
+.cell-input {
+  width: 100%;
+  height: 100%;
+  padding: 4px 8px;
+  text-align: right;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+}
+
+.cell-input:focus {
+  background: #eef6ff;
+  box-shadow: inset 0 0 0 2px #3182f6;
+}
+
+.cell-locked {
+  background: #fffbeb;
+}
+
+.cell-changed {
+  background: #fff1f2;
+  box-shadow: inset 0 0 0 1px #fda4af;
+}
+
+.cell-derived {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  text-align: right;
+  padding: 4px 8px;
+}
+
+.scroll-x {
+  overflow: auto;
+  max-height: calc(100vh - 260px);
+}
