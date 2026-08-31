@@ -5,16 +5,27 @@ import { useRouter } from 'next/navigation';
 import { parseBranchTemplate, type ParseIssue, type TemplateRow } from '@/lib/excel';
 import {
   BRANCH_INPUT_KEYS,
-  INPUT_KEYS,
   SALESMAN_INPUT_KEYS,
   METRIC_BY_KEY,
+  orderedMetrics,
+  computeRow,
+  aggregateRows,
   isFieldLocked,
   nearlyEqual,
   type ValueMap,
+  type Metric,
 } from '@/lib/metrics';
-import { fmtNumber, monthName } from '@/lib/format';
+import { fmtNumber, fmtPercent, monthName } from '@/lib/format';
+import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import ReasonModal, { type ReasonInput } from '@/components/ReasonModal';
 import type { SaveConflict } from '@/lib/types';
+
+/* Seluruh kolom N..BN dalam satu urutan — sama seperti kolom Excel asli,
+ * baris cabang DAN baris salesman sekaligus. Dipakai untuk preview upload
+ * yang meniru tampilan sheet MOS asli apa adanya (lihat ExcelPreviewTable
+ * di bawah), bukan cuma menampilkan kolom yang berubah. */
+const PREVIEW_COLUMNS = orderedMetrics((m) => m.inGrid);
+const PREVIEW_HEADER = buildMosHeaderRows(PREVIEW_COLUMNS);
 
 interface Props {
   periodId: string;
@@ -49,15 +60,19 @@ interface DiffCell {
   requiresReason: boolean;
 }
 
-/** Satu baris pada tabel ringkasan — meniru bentuk grid: satu baris per
- *  salesman (plus satu baris data cabang), satu kolom per kolom yang berubah. */
-interface SummaryRow {
+/** Satu baris pada tabel preview — meniru sheet MOS asli persis: baris
+ *  cabang, tiap baris salesman, lalu baris TOTAL. Kolomnya SEMUA kolom
+ *  N..BN (lihat PREVIEW_COLUMNS), bukan cuma yang berubah — supaya layar
+ *  ini juga berfungsi sebagai verifikasi "file terbaca dengan benar",
+ *  bukan cuma daftar perubahan. */
+interface PreviewRow {
   id: string;
   name: string;
-  isBranch: boolean;
-  /** Nilai hasil pembacaan file untuk baris ini — dipakai mengisi sel yang
-   *  tidak berubah supaya tabel tetap terbaca sebagai data, bukan daftar. */
-  values: ValueMap;
+  kind: 'branch' | 'salesman' | 'total';
+  /** Nilai jadi (input apa adanya + kolom turunan sudah dihitung) untuk
+   *  baris ini — inilah yang ditampilkan di tiap sel. */
+  computed: ValueMap;
+  /** Sel yang berbeda dari data tersimpan, untuk pewarnaan & tooltip. */
   cells: Record<string, DiffCell>;
   changed: number;
   needReason: number;
@@ -196,34 +211,74 @@ export default function UploadPanel({
     lastSubmittedWeek,
   ]);
 
-  /* --- Ringkasan berbentuk tabel ------------------------------------
-   * Diff mentah bentuknya panjang ke bawah (satu baris per sel). Untuk
-   * dilihat sebelum submit, bentuk itu diputar jadi matriks seperti grid:
-   * baris = salesman, kolom = kolom yang berubah, sel = angka baru. */
-  const summary = useMemo(() => {
-    if (!parsed) return { columns: [] as string[], rows: [] as SummaryRow[] };
-
-    const touched = new Set(diffs.map((d) => d.fieldKey));
-    const columns = INPUT_KEYS.filter((k) => touched.has(k));
-
-    const rowMap = new Map<string, SummaryRow>();
-    const add = (id: string, name: string, isBranch: boolean, values: ValueMap) => {
-      if (!rowMap.has(id))
-        rowMap.set(id, { id, name, isBranch, values, cells: {}, changed: 0, needReason: 0 });
+  /* --- Preview bergaya Excel asli ------------------------------------
+   * Baris cabang, tiap salesman, lalu TOTAL — persis susunan sheet MOS.
+   * Kolom turunan (TOTAL OL PRTM, dst.) dihitung di sini juga, bukan
+   * ditinggalkan seperti di file (yang sengaja diabaikan parser) — jadi
+   * cabang bisa langsung lihat angka jadinya, bukan cuma input mentah. */
+  const preview = useMemo(() => {
+    const rows: PreviewRow[] = [];
+    const cellsFor = (id: string) => {
+      const cells: Record<string, DiffCell> = {};
+      let changed = 0;
+      let needReason = 0;
+      for (const d of diffs) {
+        if (d.salesmanId !== id) continue;
+        cells[d.fieldKey] = d;
+        changed += 1;
+        if (d.requiresReason) needReason += 1;
+      }
+      return { cells, changed, needReason };
     };
-    if (parsedBranch) add('branch', `${branchName} · data cabang`, true, parsedBranch);
-    for (const row of parsed) add(row.salesmanId, row.salesmanName, false, row.values);
 
-    for (const d of diffs) {
-      const r = rowMap.get(d.salesmanId);
-      if (!r) continue;
-      r.cells[d.fieldKey] = d;
-      r.changed += 1;
-      if (d.requiresReason) r.needReason += 1;
+    if (parsedBranch) {
+      const { cells, changed, needReason } = cellsFor('branch');
+      rows.push({
+        id: 'branch',
+        name: `${branchName} · data cabang`,
+        kind: 'branch',
+        // Baris cabang di file asli cuma memuat kolom level cabang
+        // (PLAN SALES MASTER, OL MIN PRTM, ACTUAL SALES) — kolom lain
+        // sengaja dibiarkan tidak ada di sini (dirender sebagai dash).
+        computed: parsedBranch,
+        cells,
+        changed,
+        needReason,
+      });
     }
 
-    return { columns, rows: [...rowMap.values()].filter((r) => r.changed > 0) };
-  }, [parsed, parsedBranch, diffs, branchName]);
+    if (parsed) {
+      for (const row of parsed) {
+        const { cells, changed, needReason } = cellsFor(row.salesmanId);
+        rows.push({
+          id: row.salesmanId,
+          name: row.salesmanName,
+          kind: 'salesman',
+          computed: computeRow(row.values, { week: reportingWeek }),
+          cells,
+          changed,
+          needReason,
+        });
+      }
+
+      const totalChanged = diffs.length;
+      const totalNeedReason = diffs.filter((d) => d.requiresReason).length;
+      rows.push({
+        id: 'total',
+        name: `TOTAL ${branchName}`,
+        kind: 'total',
+        computed: aggregateRows(
+          [...parsed.map((r) => r.values), parsedBranch ?? {}],
+          { week: reportingWeek },
+        ),
+        cells: {},
+        changed: totalChanged,
+        needReason: totalNeedReason,
+      });
+    }
+
+    return rows;
+  }, [parsed, parsedBranch, diffs, branchName, reportingWeek]);
 
   const errors = issues.filter((i) => i.level === 'error');
   const warnings = issues.filter((i) => i.level === 'warning');
@@ -346,20 +401,18 @@ export default function UploadPanel({
           <div className="border-b border-slate-200 px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <h3 className="text-sm font-semibold text-slate-900">Periksa hasil pembacaan</h3>
-              {diffs.length > 0 && (
-                <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
-                  <ViewButton
-                    active={view === 'table'}
-                    onClick={() => setView('table')}
-                    label="Tabel ringkasan"
-                  />
-                  <ViewButton
-                    active={view === 'detail'}
-                    onClick={() => setView('detail')}
-                    label="Rincian per sel"
-                  />
-                </div>
-              )}
+              <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+                <ViewButton
+                  active={view === 'table'}
+                  onClick={() => setView('table')}
+                  label="Tabel ringkasan"
+                />
+                <ViewButton
+                  active={view === 'detail'}
+                  onClick={() => setView('detail')}
+                  label="Rincian per sel"
+                />
+              </div>
             </div>
             {sourceInfo && (
               <p className="mt-1 text-[11px] text-slate-500">
@@ -397,13 +450,27 @@ export default function UploadPanel({
             </ul>
           )}
 
-          {diffs.length === 0 ? (
-            <p className="px-5 py-6 text-center text-xs text-slate-500">
-              Tidak ada perbedaan dengan data yang tersimpan.
-            </p>
-          ) : view === 'table' ? (
+          {view === 'table' ? (
             <>
-              <SummaryTable summary={summary} />
+              {/* Daftar status singkat per salesman, sebelum tabel penuh —
+                  supaya sekilas ketahuan siapa yang datanya berubah, siapa
+                  yang perlu alasan, tanpa harus menyisir tabel dulu. */}
+              <ul className="max-h-40 space-y-0.5 overflow-auto border-b border-slate-100 px-5 py-3 text-xs">
+                {preview
+                  .filter((r) => r.kind !== 'total')
+                  .map((r) => (
+                    <li key={r.id} className={r.needReason > 0 ? 'text-amber-700' : 'text-slate-600'}>
+                      {r.needReason > 0 ? '⚠' : '✓'} {r.name}
+                      {' — '}
+                      {r.changed === 0
+                        ? 'tidak ada perubahan'
+                        : `${r.changed} sel berubah${r.needReason > 0 ? `, ${r.needReason} perlu alasan` : ''}`}
+                    </li>
+                  ))}
+              </ul>
+
+              <ExcelPreviewTable rows={preview} reportingWeek={reportingWeek} />
+
               <p className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 px-5 py-2 text-[11px] text-slate-500">
                 <span>
                   <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-sky-100 align-middle" />
@@ -414,10 +481,15 @@ export default function UploadPanel({
                   berubah &amp; perlu alasan
                 </span>
                 <span className="text-slate-400">
-                  angka abu-abu = tidak berubah · titik (·) = kosong di file
+                  putih = input dari file · abu-abu = dihitung otomatis · dash (—) = tidak berlaku
+                  untuk baris ini
                 </span>
               </p>
             </>
+          ) : diffs.length === 0 ? (
+            <p className="px-5 py-6 text-center text-xs text-slate-500">
+              Tidak ada perbedaan dengan data yang tersimpan.
+            </p>
           ) : (
             <div className="max-h-96 overflow-auto">
               <table className="w-full text-xs">
@@ -510,40 +582,81 @@ export default function UploadPanel({
   );
 }
 
-/* Tabel ringkasan: bentuknya sama dengan grid input — baris salesman ke
- * bawah, kolom ke samping — supaya sekali lihat ketahuan angka mana yang
- * berubah dan berapa totalnya, tanpa menggulung daftar panjang. */
-function SummaryTable({
-  summary,
-}: {
-  summary: { columns: string[]; rows: SummaryRow[] };
-}) {
-  const { columns, rows } = summary;
+/** Kolom ini tampil (punya nilai) di baris bertipe `kind`? Meniru file MOS
+ *  asli: kolom level cabang (PLAN SALES MASTER dkk) cuma terisi di baris
+ *  cabang; kolom level salesman cuma terisi di baris salesman; baris TOTAL
+ *  menampilkan semuanya (hasil agregat). */
+function columnAppliesTo(col: Metric, kind: PreviewRow['kind']): boolean {
+  if (kind === 'total') return true;
+  const isBranchCol = col.level === 'branch';
+  return kind === 'branch' ? isBranchCol : !isBranchCol;
+}
 
+/* Preview bergaya Excel asli: header 3 tingkat identik dengan grid input
+ * (baris 1 grup besar, baris 2 judul kolom, baris 3 rincian), lalu baris
+ * cabang → tiap salesman → TOTAL, SEMUA kolom N..BN tampil sekaligus —
+ * bukan cuma yang berubah — supaya layar ini juga jadi verifikasi "file
+ * terbaca dengan benar", persis pratinjau di file Excel aslinya. */
+function ExcelPreviewTable({
+  rows,
+  reportingWeek,
+}: {
+  rows: PreviewRow[];
+  reportingWeek: number;
+}) {
   return (
-    <div className="max-h-[28rem] overflow-auto">
+    <div className="max-h-[32rem] overflow-auto">
       <table className="min-w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
-            <th className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            <th
+              className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-slate-500"
+              rowSpan={3}
+              style={{ minWidth: 200 }}
+            >
               Salesman
             </th>
-            <th className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 px-3 py-2 text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Berubah
-            </th>
-            {columns.map((k) => {
-              const m = METRIC_BY_KEY[k];
+            {PREVIEW_HEADER.tops.map((g, i) => (
+              <th
+                key={`${g.label}-${i}`}
+                colSpan={g.span}
+                className={`sticky top-0 z-20 whitespace-nowrap px-3 py-1.5 text-left ${
+                  MOS_TOP_TONE[g.label] ?? '!bg-slate-100'
+                }`}
+              >
+                {g.label}
+              </th>
+            ))}
+          </tr>
+          <tr>
+            {PREVIEW_HEADER.subs.map((sh, i) => (
+              <th
+                key={`${sh.top}-${sh.label}-${i}`}
+                colSpan={sh.span}
+                rowSpan={sh.hasTier ? 1 : 2}
+                className={`sticky top-6 z-20 whitespace-nowrap px-2 py-1.5 text-center font-normal ${
+                  MOS_SUB_TONE[sh.top] ?? '!bg-slate-50'
+                }`}
+                style={{ minWidth: sh.span === 1 ? 96 : undefined }}
+              >
+                {sh.label}
+              </th>
+            ))}
+          </tr>
+          <tr>
+            {PREVIEW_COLUMNS.map((c) => {
+              const tier = (c.mos ?? {}).tier;
+              if (!tier) return null;
               return (
                 <th
-                  key={k}
-                  className="sticky top-0 z-20 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-3 py-2 text-right align-bottom text-[11px] font-medium text-slate-600"
+                  key={c.key}
+                  title={`${c.label}${c.excel ? ` (kolom Excel ${c.excel})` : ''}`}
+                  className={`sticky top-[3.25rem] z-20 whitespace-nowrap px-2 py-1.5 text-center font-normal ${
+                    MOS_SUB_TONE[(c.mos ?? { top: c.group }).top] ?? '!bg-slate-50'
+                  } ${c.week === reportingWeek ? 'ring-1 ring-inset ring-brand-400' : ''}`}
+                  style={{ minWidth: 96 }}
                 >
-                  <span className="block">{m?.label ?? k}</span>
-                  {m?.excel && (
-                    <span className="block text-[10px] font-normal text-slate-400">
-                      kolom {m.excel}
-                    </span>
-                  )}
+                  {tier}
                 </th>
               );
             })}
@@ -552,10 +665,19 @@ function SummaryTable({
 
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className={r.isBranch ? 'bg-sky-50/50' : ''}>
+            <tr
+              key={r.id}
+              className={
+                r.kind === 'branch' ? 'bg-sky-50/50' : r.kind === 'total' ? 'bg-slate-100' : ''
+              }
+            >
               <th
-                className={`sticky left-0 z-10 whitespace-nowrap border-b border-r border-slate-200 px-4 py-1.5 text-left font-medium ${
-                  r.isBranch ? 'bg-sky-50 text-sky-900' : 'bg-white text-slate-700'
+                className={`sticky left-0 z-10 whitespace-nowrap border-r border-slate-200 px-4 py-1.5 text-left font-medium ${
+                  r.kind === 'branch'
+                    ? 'bg-sky-50 text-sky-900'
+                    : r.kind === 'total'
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'bg-white text-slate-700'
                 }`}
               >
                 {r.name}
@@ -565,87 +687,59 @@ function SummaryTable({
                   </span>
                 )}
               </th>
-              <td className="border-b border-slate-100 px-3 py-1.5 text-center tabular-nums text-slate-500">
-                {r.changed}
-              </td>
-              {columns.map((k) => {
-                const d = r.cells[k];
-                if (!d) {
-                  const v = r.values[k];
+              {PREVIEW_COLUMNS.map((c) => {
+                if (!columnAppliesTo(c, r.kind)) {
                   return (
-                    <td
-                      key={k}
-                      className="border-b border-slate-100 px-3 py-1.5 text-right tabular-nums text-slate-300"
-                    >
-                      {typeof v === 'number' ? fmtNumber(v) : '·'}
+                    <td key={c.key} className="border-b border-slate-100 px-2 py-1.5 text-right text-slate-200">
+                      —
                     </td>
                   );
                 }
-                const delta = (d.newValue ?? 0) - (d.oldValue ?? 0);
-                return (
-                  <td
-                    key={k}
-                    title={`Sebelum ${fmtNumber(d.oldValue)} → sesudah ${fmtNumber(d.newValue)}`}
-                    className={`border-b border-slate-100 px-3 py-1.5 text-right tabular-nums ${
-                      d.requiresReason ? 'bg-amber-50' : 'bg-sky-50/60'
-                    }`}
-                  >
-                    <span className="font-semibold text-slate-800">{fmtNumber(d.newValue)}</span>
-                    <span
-                      className={`block text-[10px] ${
-                        delta >= 0 ? 'text-emerald-600' : 'text-rose-600'
+
+                const fmt = (v: number | null | undefined) =>
+                  c.format === 'percent' ? fmtPercent(v) : fmtNumber(v);
+                const d = c.kind === 'input' ? r.cells[c.key] : undefined;
+                const value = r.computed[c.key] as number | null | undefined;
+
+                if (d) {
+                  const delta = (d.newValue ?? 0) - (d.oldValue ?? 0);
+                  return (
+                    <td
+                      key={c.key}
+                      title={`Sebelum ${fmtNumber(d.oldValue)} → sesudah ${fmtNumber(d.newValue)}`}
+                      className={`border-b border-slate-100 px-2 py-1.5 text-right tabular-nums ${
+                        d.requiresReason ? 'bg-amber-50' : 'bg-sky-50/60'
                       }`}
                     >
-                      {delta >= 0 ? '+' : ''}
-                      {fmtNumber(delta)}
-                    </span>
+                      <span className="font-semibold text-slate-800">{fmt(d.newValue)}</span>
+                      <span
+                        className={`block text-[10px] ${delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}
+                      >
+                        {delta >= 0 ? '+' : ''}
+                        {fmtNumber(delta)}
+                      </span>
+                    </td>
+                  );
+                }
+
+                return (
+                  <td
+                    key={c.key}
+                    className={`border-b border-slate-100 px-2 py-1.5 text-right tabular-nums ${
+                      c.kind === 'derived'
+                        ? 'bg-slate-50 text-slate-500'
+                        : r.kind === 'total'
+                          ? 'font-semibold text-slate-900'
+                          : 'text-slate-700'
+                    }`}
+                  >
+                    {fmt(value)}
                   </td>
                 );
               })}
             </tr>
           ))}
         </tbody>
-
-        <tfoot>
-          <tr>
-            <th className="sticky left-0 z-10 border-t-2 border-r border-slate-300 bg-slate-50 px-4 py-2 text-left font-semibold text-slate-800">
-              TOTAL
-            </th>
-            <td className="border-t-2 border-slate-300 bg-slate-50 px-3 py-2 text-center tabular-nums font-semibold text-slate-700">
-              {rows.reduce((s, r) => s + r.changed, 0)}
-            </td>
-            {columns.map((k) => {
-              let total = 0;
-              let delta = 0;
-              for (const r of rows) {
-                const d = r.cells[k];
-                if (d) {
-                  total += d.newValue ?? 0;
-                  delta += (d.newValue ?? 0) - (d.oldValue ?? 0);
-                } else {
-                  const v = r.values[k];
-                  if (typeof v === 'number') total += v;
-                }
-              }
-              return (
-                <td
-                  key={k}
-                  className="border-t-2 border-slate-300 bg-slate-50 px-3 py-2 text-right tabular-nums font-semibold text-slate-900"
-                >
-                  {fmtNumber(total)}
-                  <span
-                    className={`block text-[10px] font-normal ${
-                      delta >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {delta >= 0 ? '+' : ''}
-                    {fmtNumber(delta)}
-                  </span>
-                </td>
-              );
-            })}
-          </tr>
-        </tfoot>
       </table>
     </div>
   );
