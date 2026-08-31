@@ -65,7 +65,7 @@ export default function ReportWorkspace(props: Props) {
             active={mode === 'upload'}
             onClick={() => setMode('upload')}
             label="Upload Excel"
-            hint="Unduh template, isi di Excel, unggah"
+            hint="Unggah file MOS cabang apa adanya"
           />
         </div>
 
@@ -93,12 +93,18 @@ export default function ReportWorkspace(props: Props) {
         <UploadPanel
           periodId={props.periodId}
           branchId={props.branchId}
+          branchCode={props.branchCode}
+          branchName={props.branchName}
+          year={props.year}
+          month={props.month}
           reportingWeek={props.reportingWeek}
           readOnly={props.readOnly}
           lastSubmittedWeek={props.lastSubmittedWeek}
           salesmen={props.salesmen}
           currentValues={props.initialValues}
           snapshotValues={props.snapshotValues}
+          branchCurrentValues={props.branchInitialValues}
+          branchSnapshotValues={props.branchSnapshotValues}
         />
       )}
     </div>
