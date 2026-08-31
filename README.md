@@ -72,18 +72,24 @@ tidak melihat menu Administrasi, PIC Head Office tidak melihat menu Input Report
 Monitoring perubahan berada di bagian bawah halaman Ringkasan, bukan menu terpisah.
 
 Di halaman Input Report ada pemilih mode **Isi Langsung** (grid) dan **Upload Excel**.
-Keduanya menyimpan lewat API yang sama, jadi aturan wajib-alasan berlaku identik. Pemilih
-periodenya dipecah jadi dua kotak — **Bulan** dan **Tahun** — supaya tidak perlu memindai
-daftar 24 bulan; berganti bulan otomatis mengatur ulang pilihan minggu.
+Keduanya menyimpan lewat API yang sama, jadi aturan wajib-alasan berlaku identik. Mode
+upload menerima **file MOS cabang apa adanya** — tidak perlu disalin ke template baru
+(lihat §3). Pemilih periodenya dipecah jadi dua kotak — **Bulan** dan **Tahun** — supaya
+tidak perlu memindai daftar 24 bulan; berganti bulan otomatis mengatur ulang pilihan
+minggu.
 
 Di atas keduanya selalu ada satu panel kecil, **Data Tingkat Cabang**: PLAN SALES MASTER,
-OL MIN PRTM, dan ACTUAL SALES. Ketiganya sengaja **tidak** ada di grid per salesman maupun
-di template upload — di file Excel asli, ketiga angka itu SELALU diisi sekali di baris TOTAL
-cabang, tidak pernah dipecah per orang (dicek langsung di `Sampit.xlsx`: baris salesman untuk
-kolom N/AG/BM selalu kosong). Panel ini meniru itu: satu angka per kolom, disimpan ke tabel
-terpisah (`report_branch_entries`), dengan aturan wajib-alasan dan jejak audit yang identik
-dengan grid. Lihat `src/app/(app)/input/BranchLevelPanel.tsx` dan §8 (BRANCH_INPUT_KEYS di
+OL MIN PRTM, dan ACTUAL SALES. Ketiganya sengaja **tidak** ada di grid per salesman — di
+file Excel asli, ketiga angka itu SELALU diisi sekali di baris cabang, tidak pernah dipecah
+per orang (dicek langsung di `Sampit.xlsx`: baris salesman untuk kolom N/AG/BM selalu
+kosong). Panel ini meniru itu: satu angka per kolom, disimpan ke tabel terpisah
+(`report_branch_entries`), dengan aturan wajib-alasan dan jejak audit yang identik dengan
+grid. Lihat `src/app/(app)/input/BranchLevelPanel.tsx` dan §7 (BRANCH_INPUT_KEYS di
 `src/lib/metrics.ts`).
+
+Lewat **upload**, ketiganya tetap ikut terbaca — diambil dari baris cabang di file MOS,
+persis di tempat aslinya — lalu muncul di layar preview sebagai perubahan tingkat cabang
+sebelum disimpan.
 
 ---
 
@@ -93,15 +99,46 @@ Keduanya dibangun, dan keduanya melewati pintu validasi yang sama. Perbandingann
 
 | | Grid web | Upload Excel |
 |---|---|---|
-| Risiko salah kolom | nihil — kolom terikat namanya | rendah — parser membaca *kunci teknis* di baris ke-6, bukan posisi kolom |
-| Rumus rusak / `#REF!` | mustahil — kolom hitungan tidak ada di form | mustahil — kolom hitungan tidak ada di template |
-| Salah tempel antar cabang | mustahil — user cabang hanya melihat cabangnya | terdeteksi — ID salesman dicocokkan, baris asing ditolak |
+| Yang diunggah | — | **file MOS cabang apa adanya**, tanpa disalin ke template baru |
+| Risiko salah kolom | nihil — kolom terikat namanya | nihil — kolom dibaca per **huruf kolom Excel** (O, S, AE, …) |
+| Rumus rusak / `#REF!` | mustahil — kolom hitungan tidak ada di form | tidak ikut masuk — kolom hitungan diabaikan & dihitung ulang |
+| Salah tempel antar cabang | mustahil — user cabang hanya melihat cabangnya | ditolak — baris cabang dicocokkan lewat kode & nama cabang |
 | Ketahuan sebelum tersimpan | ya, sel berubah langsung ditandai merah | ya, ada layar preview diff sebelum konfirmasi |
 | Cocok untuk | pembaruan rutin mingguan | cabang yang sudah terlanjur menyiapkan data di Excel |
 
-**Rekomendasi penerapan:** buka dua-duanya di bulan pertama supaya cabang tidak kaget, lalu
-setelah 2–3 bulan matikan upload (cukup hapus tombol modenya di
-`src/app/(app)/input/ReportWorkspace.tsx`).
+### Upload menerima file MOS asli
+
+Cabang **tidak perlu memindahkan datanya ke template baru**. File Excel yang selama ini
+mereka isi bisa langsung diunggah. Yang dilakukan parser (`src/lib/excel.ts`):
+
+1. Mencari sheet bulan yang sedang dilaporkan (mis. `AGUSTUS 2026`), lalu `MOS` sebagai
+   cadangan.
+2. Mencari baris header — baris dengan `NO` di kolom A dan `BRANCH` di kolom C.
+3. Mencari **baris cabang** lewat kode cabang (kolom PLANT) atau nama cabang (kolom
+   BRANCH). Dari baris ini dibaca PLAN SALES MASTER (N), OL MIN PRTM (AG), dan
+   ACTUAL SALES (BM) — data tingkat cabang.
+4. Membaca **baris salesman** di bawahnya sampai bertemu baris cabang berikutnya (kolom NO
+   berisi angka) atau baris `TOTAL`. Nama salesman di kolom C dicocokkan dengan master.
+5. Memetakan nilai lewat **huruf kolom Excel**, diambil langsung dari field `excel` di
+   `src/lib/metrics.ts` — tidak ada daftar kolom ganda yang bisa ketinggalan.
+
+Baris penampung `PROJECT`/`OTHERS` dilewati diam-diam, sel `#REF!` dianggap kosong, dan
+file cabang lain ditolak dengan pesan yang jelas. Template hasil unduhan memakai format
+yang sama persis (lihat §7), jadi keduanya diparsing oleh kode yang sama.
+
+### Layar periksa sebelum simpan
+
+Hasil pembacaan ditampilkan sebagai **tabel ringkasan** berbentuk sama dengan grid input:
+satu baris per salesman (baris data cabang di paling atas), satu kolom per kolom yang
+berubah, plus baris `TOTAL`. Sel yang berubah diberi warna — biru untuk perubahan biasa,
+kuning untuk yang wajib disertai alasan — dengan selisihnya di bawah angka barunya; sel
+yang tidak berubah tetap ditampilkan abu-abu supaya bentuknya terbaca sebagai data, bukan
+daftar. Kolom yang sama sekali tidak berubah tidak ditampilkan agar tabel tetap ringkas.
+
+Bentuk lama (satu baris per sel: salesman · kolom · sebelum · sesudah · selisih) masih ada
+di tab **Rincian per sel** — berguna saat menelusuri satu perubahan tertentu.
+
+**Rekomendasi penerapan:** buka dua-duanya di bulan pertama supaya cabang tidak kaget.
 Grid web memberi jejak audit yang paling bersih karena perubahan tercatat per sel saat
 diketik, bukan per file.
 
@@ -274,7 +311,7 @@ public/
 src/lib/
   metrics.ts        ★ SUMBER KEBENARAN — definisi kolom + semua rumus turunan
   period.ts           perhitungan minggu berjalan dari kalender
-  excel.ts            parser file upload (SheetJS, jalan di browser)
+  excel.ts          ★ parser upload: file MOS cabang asli ATAU template sistem
   xlsx-styled.ts      pembuat file Excel bergaya (ExcelJS, jalan di server)
   report.ts           query data (server-side)
   format.ts           format angka/tanggal gaya Indonesia
