@@ -1,5 +1,11 @@
 import { getProfile } from '@/lib/supabase/server';
-import { getActivePeriod, listBranches, listEntries, listSalesmen } from '@/lib/report';
+import {
+  getActivePeriod,
+  getBranchEntry,
+  listBranches,
+  listEntries,
+  listSalesmen,
+} from '@/lib/report';
 import { buildBranchTemplateWorkbook } from '@/lib/xlsx-styled';
 import { monthName } from '@/lib/format';
 
@@ -33,9 +39,10 @@ export async function GET(request: Request) {
   const branch = branches.find((b) => b.id === branchId);
   if (!branch) return new Response('Cabang tidak ditemukan.', { status: 404 });
 
-  const [salesmen, entries] = await Promise.all([
+  const [salesmen, entries, branchEntry] = await Promise.all([
     listSalesmen(branchId),
     listEntries(period.id, branchId),
+    getBranchEntry(period.id, branchId),
   ]);
 
   // Minggu yang dilaporkan boleh dipilih cabang; hanya dipakai untuk
@@ -57,6 +64,8 @@ export async function GET(request: Request) {
       salesmanName: s.name,
       values: entries.find((e) => e.salesman_id === s.id)?.values ?? {},
     })),
+    // Baris cabang ikut terisi datanya, sama seperti file MOS asli.
+    branchValues: branchEntry?.values ?? {},
   });
 
   const filename = `MOS_${branch.code}_${monthName(period.month)}_${period.year}_W${week}.xlsx`;
