@@ -16,10 +16,26 @@ const numberFmt = new Intl.NumberFormat('id-ID', {
   maximumFractionDigits: 2,
 });
 
+const wholeNumberFmt = new Intl.NumberFormat('id-ID', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
 export function fmtNumber(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '';
   if (v === 0) return '-';
   return numberFmt.format(v);
+}
+
+/** Sama seperti fmtNumber, tapi selalu dibulatkan ke bilangan bulat —
+ *  dipakai di kartu ringkasan dashboard (mis. Total PO Outlook) yang
+ *  memang tidak butuh presisi desimal, beda dengan grid input yang masih
+ *  butuh 2 desimal. */
+export function fmtWhole(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '';
+  const rounded = Math.round(v);
+  if (rounded === 0) return '-';
+  return wholeNumberFmt.format(rounded);
 }
 
 export function fmtPercent(v: number | null | undefined): string {
