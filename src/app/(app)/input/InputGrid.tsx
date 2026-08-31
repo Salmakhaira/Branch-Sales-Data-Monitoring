@@ -12,30 +12,9 @@ import {
   type ValueMap,
 } from '@/lib/metrics';
 import { fmtNumber, fmtPercent, parseNumberInput } from '@/lib/format';
+import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import ReasonModal, { type ReasonInput } from '@/components/ReasonModal';
 import type { SaveConflict } from '@/lib/types';
-
-/* Warna grup header, meniru sheet MOS asli: OUTLOOK PRTM persik,
- * OUTLOOK REVENUE TM hijau. Dibuat lebih pucat dari Excel supaya angka
- * di bawahnya tetap nyaman dibaca di layar. */
-/* Tanda `!` diperlukan: aturan `.grid-table thead th` di globals.css
- * punya specificity lebih tinggi daripada kelas utilitas biasa, jadi
- * tanpa `!` warnanya ikut abu-abu bawaan tabel. */
-const TOP_TONE: Record<string, string> = {
-  'OUTLOOK PRTM': '!bg-orange-100 !text-orange-900',
-  'OUTLOOK REVENUE TM': '!bg-emerald-100 !text-emerald-900',
-  'PLAN SALES MASTER': '!bg-sky-100 !text-sky-900',
-  'ACTUAL SALES': '!bg-lime-100 !text-lime-900',
-};
-
-/* Versi lebih pucat untuk baris judul kolom & rincian, supaya baris grup
- * tetap yang paling menonjol. */
-const SUB_TONE: Record<string, string> = {
-  'OUTLOOK PRTM': '!bg-orange-50 !text-orange-900',
-  'OUTLOOK REVENUE TM': '!bg-emerald-50 !text-emerald-900',
-  'PLAN SALES MASTER': '!bg-sky-50 !text-sky-900',
-  'ACTUAL SALES': '!bg-lime-50 !text-lime-900',
-};
 
 type Values = Record<string, Record<string, number | null>>; // salesmanId -> field -> value
 
@@ -85,28 +64,7 @@ export default function InputGrid({
    *   baris 2 = judul kolom  (ACT PRTM by SO SAP W1, QUOT CONFIDENCE W1, POCO, …)
    *   baris 3 = rincian      (>80%, >50%-80%, <50%, NOT ACTIVE, PLAFOND, …)
    * Kolom tanpa rincian: judulnya memanjang ke bawah (rowSpan 2). */
-  const headerRows = useMemo(() => {
-    const info = (m: (typeof columns)[number]) => m.mos ?? { top: m.group, sub: m.label };
-
-    const tops: { label: string; span: number }[] = [];
-    const subs: { label: string; span: number; hasTier: boolean; top: string }[] = [];
-
-    for (const c of columns) {
-      const { top, sub, tier } = info(c);
-      const lastTop = tops[tops.length - 1];
-      if (lastTop && lastTop.label === top) lastTop.span += 1;
-      else tops.push({ label: top, span: 1 });
-
-      const lastSub = subs[subs.length - 1];
-      if (lastSub && lastSub.top === top && lastSub.label === (sub ?? '')) {
-        lastSub.span += 1;
-        lastSub.hasTier ||= Boolean(tier);
-      } else {
-        subs.push({ label: sub ?? '', span: 1, hasTier: Boolean(tier), top });
-      }
-    }
-    return { tops, subs };
-  }, [columns]);
+  const headerRows = useMemo(() => buildMosHeaderRows(columns), [columns]);
 
   const dirtyCells = useMemo(() => {
     const set = new Set<string>();
@@ -314,7 +272,7 @@ export default function InputGrid({
                 <th
                   key={`${g.label}-${i}`}
                   colSpan={g.span}
-                  className={`px-3 py-1.5 text-left ${TOP_TONE[g.label] ?? '!bg-slate-100'}`}
+                  className={`px-3 py-1.5 text-left ${MOS_TOP_TONE[g.label] ?? '!bg-slate-100'}`}
                 >
                   {/* Grup di-merge sangat lebar; label dibuat menempel di
                       kiri area gulir supaya tetap terbaca saat digulir. */}
@@ -330,7 +288,7 @@ export default function InputGrid({
                   colSpan={sh.span}
                   rowSpan={sh.hasTier ? 1 : 2}
                   className={`px-2 py-1.5 text-center font-normal ${
-                    SUB_TONE[sh.top] ?? '!bg-slate-50'
+                    MOS_SUB_TONE[sh.top] ?? '!bg-slate-50'
                   }`}
                   style={{ minWidth: sh.span === 1 ? 96 : undefined }}
                 >
@@ -348,7 +306,7 @@ export default function InputGrid({
                     key={c.key}
                     title={`${c.label}${c.excel ? ` (kolom Excel ${c.excel})` : ''}${c.hint ? `\n${c.hint}` : ''}`}
                     className={`px-2 py-1.5 text-center font-normal ${
-                      SUB_TONE[(c.mos ?? { top: c.group }).top] ?? '!bg-slate-50'
+                      MOS_SUB_TONE[(c.mos ?? { top: c.group }).top] ?? '!bg-slate-50'
                     } ${c.week === reportingWeek ? 'ring-1 ring-inset ring-brand-400' : ''}`}
                     style={{ minWidth: 96 }}
                   >
