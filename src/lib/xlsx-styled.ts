@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { orderedMetrics, type Metric, type ValueMap } from '@/lib/metrics';
+import { excelColumnIndex, orderedMetrics, type Metric, type ValueMap } from '@/lib/metrics';
 import { monthName } from '@/lib/format';
 
 /* =====================================================================
@@ -288,10 +288,24 @@ export async function buildNationalWorkbook(input: NationalExportInput): Promise
 }
 
 /* --------------------------------------------------------------------
- *  2. TEMPLATE INPUT CABANG
+ *  2. TEMPLATE INPUT CABANG  —  BERFORMAT FILE MOS ASLI
  *
- *  Struktur baris WAJIB dipertahankan — parser di src/lib/excel.ts
- *  mencari baris kunci teknis '__salesman_name' / '__salesman_id'.
+ *  Template ini SENGAJA dibuat identik dengan file Excel yang selama ini
+ *  dipakai cabang, sampai ke huruf kolomnya:
+ *
+ *    Sheet   : '<BULAN> <TAHUN>'  (mis. 'AGUSTUS 2026')
+ *    Baris 3-5 : header tiga tingkat
+ *    Baris 7   : baris CABANG  (A=NO, B=PLANT/kode, C=BRANCH/nama)
+ *                memuat PLAN SALES MASTER (N), OL MIN PRTM (AG),
+ *                ACTUAL SALES (BM)
+ *    Baris 8.. : baris SALESMAN (C = nama)
+ *    Baris akhir: TOTAL
+ *
+ *  Kolom ditaruh pada POSISI HURUF ASLINYA (N, O, …, BN), bukan dirapatkan.
+ *  Itu yang membuat file lama cabang dan file hasil unduhan ini bisa
+ *  diparsing oleh kode yang sama (src/lib/excel.ts). Kolom yang tidak
+ *  dipakai sistem (D–M, AZ–BL) tetap ada supaya huruf kolom tidak
+ *  bergeser, tapi disembunyikan agar tampilannya tetap rapat.
  * ------------------------------------------------------------------ */
 
 export interface TemplateInput {
@@ -301,46 +315,43 @@ export interface TemplateInput {
   month: number;
   week: number;
   rows: { salesmanId: string; salesmanName: string; values: ValueMap }[];
+  /** PLAN SALES MASTER / OL MIN PRTM / ACTUAL SALES — isi baris cabang. */
+  branchValues?: ValueMap;
 }
 
 export async function buildBranchTemplateWorkbook(input: TemplateInput): Promise<Buffer> {
-  // PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES tidak ikut template ini —
-  // ketiganya diisi SEKALI untuk seluruh cabang (persis baris TOTAL di
-  // Excel asli), lewat panel "Data Tingkat Cabang" di halaman Input, bukan
-  // per salesman lewat file upload.
-  const inputCols = orderedMetrics((m) => m.kind === 'input' && m.level !== 'branch');
+  const cols = orderedMetrics((m) => Boolean(m.excel));
+  const byColumn = new Map<number, Metric>();
+  for (const m of cols) {
+    const idx = excelColumnIndex(m.excel);
+    if (idx !== Number.MAX_SAFE_INTEGER) byColumn.set(idx, m);
+  }
+  const lastCol = Math.max(...byColumn.keys());
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sales Branch Report Data Monitoring';
 
-  const ws = wb.addWorksheet('INPUT', {
-    views: [{ state: 'frozen', xSplit: 2, ySplit: 6 }],
+  const sheetName = `${monthName(input.month)} ${input.year}`;
+  const ws = wb.addWorksheet(sheetName, {
+    views: [{ state: 'frozen', xSplit: 3, ySplit: 5 }],
   });
 
-  const IDENT = 2;
-  const lastCol = IDENT + inputCols.length;
-
-  /* Header meniru PERSIS sheet MOS di Sampit.xlsx: tiga tingkat di baris
-   * 3-4-5, dengan pola merge yang sama (grup besar di baris 3; judul kolom
-   * di baris 4, di-merge turun ke baris 5 bila tidak punya rincian; rincian
-   * seperti '>80%' / 'NOT ACTIVE' di baris 5). Baris 6 tetap kunci teknis
-   * dan baris 7 ke bawah tetap data — parser mencari baris kunci
-   * berdasarkan isinya, jadi posisi header boleh berubah. */
   const R_TOP = 3;
   const R_SUB = 4;
   const R_TIER = 5;
+  const R_BRANCH = 7;
 
-  ws.mergeCells(1, 1, 1, Math.min(lastCol, 12));
+  ws.mergeCells(1, 1, 1, 12);
   const t1 = ws.getCell(1, 1);
-  t1.value = `REPORT MOS — ${input.branchName} (${input.branchCode})`;
+  t1.value = `REPORT MOS — ${input.branchName} (${input.branchCode}) — ${sheetName}, MINGGU ${input.week}`;
   t1.font = { name: 'Calibri', size: 14, bold: true };
 
-  ws.mergeCells(2, 1, 2, Math.min(lastCol, 12));
+  ws.mergeCells(2, 1, 2, 12);
   const t2 = ws.getCell(2, 1);
-  t2.value = `Periode ${monthName(input.month)} ${input.year} — Minggu ${input.week}. Isi hanya sel angka; jangan menambah atau menghapus baris & kolom.`;
+  t2.value =
+    'Isi hanya sel angka. Jangan menambah/menghapus baris & kolom, dan jangan mengubah nama salesman di kolom C.';
   t2.font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF6B7683' } };
 
-  /* Baris 3-4-5 = header bertingkat, 6 = kunci teknis (dibaca parser) */
   const HDR_FONT = { name: 'Calibri', size: 11, bold: true } as const;
   const HDR_ALIGN = {
     horizontal: 'center' as const,
@@ -348,8 +359,6 @@ export async function buildBranchTemplateWorkbook(input: TemplateInput): Promise
     wrapText: true,
   };
 
-  /** Terapkan gaya header pada satu sel. `edge` menentukan garis tepi
-   *  tebal, meniru file asli (medium di atas baris 3 & bawah baris 5). */
   function styleHeader(
     row: number,
     col: number,
@@ -368,9 +377,8 @@ export async function buildBranchTemplateWorkbook(input: TemplateInput): Promise
     };
   }
 
-  // Kolom identitas: di file asli A3:A5 dst. di-merge tiga baris penuh.
-  const identHeaders = ['SALESMAN', 'ID (disembunyikan — jangan di-unhide/diubah)'];
-  identHeaders.forEach((label, i) => {
+  /* --- Kolom identitas A, B, C (merge baris 3-5, seperti aslinya) --- */
+  ['NO', 'PLANT', 'BRANCH'].forEach((label, i) => {
     const col = i + 1;
     ws.mergeCells(R_TOP, col, R_TIER, col);
     ws.getCell(R_TOP, col).value = label;
@@ -383,136 +391,194 @@ export async function buildBranchTemplateWorkbook(input: TemplateInput): Promise
     }
   });
 
-  // Baris 3 — grup besar (mis. 'OUTLOOK PRTM' yang di aslinya membentang
-  // dari ACT PRTM sampai TOTAL PO OUTLOOK).
-  let c = IDENT + 1;
-  while (c <= lastCol) {
-    const top = mosOf(inputCols[c - IDENT - 1]).top;
-    let span = 1;
-    while (c + span <= lastCol && mosOf(inputCols[c + span - IDENT - 1]).top === top) span += 1;
-    if (span > 1) ws.mergeCells(R_TOP, c, R_TOP, c + span - 1);
-    ws.getCell(R_TOP, c).value = top;
+  /* --- Baris 3: grup besar --- */
+  const used = [...byColumn.keys()].sort((a, b) => a - b);
+  let i = 0;
+  while (i < used.length) {
+    const top = mosOf(byColumn.get(used[i])!).top;
+    let j = i;
+    while (j + 1 < used.length && mosOf(byColumn.get(used[j + 1])!).top === top) j += 1;
+    const from = used[i];
+    const to = used[j];
     const fill = MOS_FILL[top] ?? FILL.identity;
-    for (let k = 0; k < span; k++) styleHeader(R_TOP, c + k, fill, { top: true });
-    c += span;
+    // Grup yang seluruh kolomnya tidak punya sub-header (PLAN SALES
+    // MASTER) di-merge tiga baris penuh, persis N3:N5 di file asli.
+    const flat = used.slice(i, j + 1).every((c) => !mosOf(byColumn.get(c)!).sub);
+    if (flat) {
+      ws.mergeCells(R_TOP, from, R_TIER, to);
+      ws.getCell(R_TOP, from).value = top;
+      for (let r2 = R_TOP; r2 <= R_TIER; r2++) {
+        for (let c = from; c <= to; c++) {
+          styleHeader(r2, c, fill, { top: r2 === R_TOP, bottom: r2 === R_TIER });
+        }
+      }
+    } else {
+      if (to > from) ws.mergeCells(R_TOP, from, R_TOP, to);
+      ws.getCell(R_TOP, from).value = top;
+      for (let c = from; c <= to; c++) styleHeader(R_TOP, c, fill, { top: true });
+    }
+    i = j + 1;
   }
 
-  // Baris 4 — judul kolom. Bila tidak ada rincian di baris 5, sel ini
-  // di-merge turun ke baris 5 (persis O4:O5, AE4:AE5, AU4:AU5 di aslinya).
-  c = IDENT + 1;
-  while (c <= lastCol) {
-    const here = mosOf(inputCols[c - IDENT - 1]);
-    let span = 1;
-    while (c + span <= lastCol) {
-      const next = mosOf(inputCols[c + span - IDENT - 1]);
-      if (next.top !== here.top || next.sub !== here.sub) break;
-      span += 1;
+  /* --- Baris 4: judul kolom (merge turun ke 5 bila tanpa rincian) --- */
+  i = 0;
+  while (i < used.length) {
+    const info = mosOf(byColumn.get(used[i])!);
+    let j = i;
+    while (j + 1 < used.length) {
+      const next = mosOf(byColumn.get(used[j + 1])!);
+      if (next.top !== info.top || next.sub !== info.sub) break;
+      j += 1;
     }
-    const fill = MOS_FILL[here.top] ?? FILL.identity;
-    const hasTier = Array.from({ length: span }, (_, k) =>
-      mosOf(inputCols[c + k - IDENT - 1]).tier,
-    ).some(Boolean);
+    const from = used[i];
+    const to = used[j];
+    const fill = MOS_FILL[info.top] ?? FILL.identity;
+    const hasTier = used.slice(i, j + 1).some((c) => mosOf(byColumn.get(c)!).tier);
+
+    if (!info.sub) {
+      // Sudah ditangani baris 3 (merge tiga baris penuh).
+      i = j + 1;
+      continue;
+    }
 
     if (hasTier) {
-      if (span > 1) ws.mergeCells(R_SUB, c, R_SUB, c + span - 1);
-      ws.getCell(R_SUB, c).value = here.sub ?? '';
-      for (let k = 0; k < span; k++) styleHeader(R_SUB, c + k, fill);
+      if (to > from) ws.mergeCells(R_SUB, from, R_SUB, to);
+      ws.getCell(R_SUB, from).value = info.sub ?? '';
+      for (let c = from; c <= to; c++) styleHeader(R_SUB, c, fill);
     } else {
-      // tidak punya rincian -> judulnya menempati baris 4 DAN 5
-      ws.mergeCells(R_SUB, c, R_TIER, c + span - 1);
-      ws.getCell(R_SUB, c).value = here.sub ?? '';
-      for (let k = 0; k < span; k++) {
-        styleHeader(R_SUB, c + k, fill);
-        styleHeader(R_TIER, c + k, fill, { bottom: true });
+      ws.mergeCells(R_SUB, from, R_TIER, to);
+      ws.getCell(R_SUB, from).value = info.sub ?? info.top;
+      for (let c = from; c <= to; c++) {
+        styleHeader(R_SUB, c, fill);
+        styleHeader(R_TIER, c, fill, { bottom: true });
       }
     }
-    c += span;
+    i = j + 1;
   }
 
-  // Baris 5 — rincian ('>80%', '>50%-80%', '<50%', 'NOT ACTIVE', dst.)
-  inputCols.forEach((m, i) => {
-    const info = mosOf(m);
-    if (!info.tier) return;
-    const col = IDENT + 1 + i;
-    ws.getCell(R_TIER, col).value = info.tier;
-    styleHeader(R_TIER, col, MOS_FILL[info.top] ?? FILL.identity, { bottom: true });
-  });
-
-  // Baris kunci teknis — sengaja dibuat pucat & kecil supaya tidak
-  // mengganggu mata, tapi TIDAK disembunyikan agar tidak terhapus.
-  ws.getCell(6, 1).value = '__salesman_name';
-  ws.getCell(6, 2).value = '__salesman_id';
-  inputCols.forEach((m, i) => {
-    ws.getCell(6, IDENT + 1 + i).value = m.key;
-  });
-  for (let col = 1; col <= lastCol; col++) {
-    const cell = ws.getCell(6, col);
-    cell.font = { name: 'Consolas', size: 7, color: { argb: 'FFAAB2BB' } };
-    cell.fill = solid('FFF2F4F6');
-    cell.alignment = { horizontal: 'center' };
-    cell.border = { top: THIN, bottom: MEDIUM, left: THIN, right: THIN };
+  /* --- Baris 5: rincian --- */
+  for (const c of used) {
+    const info = mosOf(byColumn.get(c)!);
+    if (!info.tier) continue;
+    ws.getCell(R_TIER, c).value = info.tier;
+    styleHeader(R_TIER, c, MOS_FILL[info.top] ?? FILL.identity, { bottom: true });
   }
 
-  // Tinggi baris persis seperti sheet MOS asli (baris 4 = 41,25; 5 = 28,5).
   ws.getRow(R_TOP).height = 15;
   ws.getRow(R_SUB).height = 41.25;
   ws.getRow(R_TIER).height = 28.5;
-  ws.getRow(6).height = 11;
 
-  /* Data */
-  let r = 7;
-  for (const row of input.rows) {
-    ws.getCell(r, 1).value = row.salesmanName;
-    ws.getCell(r, 2).value = row.salesmanId;
-    inputCols.forEach((m, i) => {
-      const cell = ws.getCell(r, IDENT + 1 + i);
-      cell.value = num(row.values[m.key]);
-      cell.numFmt = ACCOUNTING_2DP;
-      // Sel isian diberi latar putih bersih agar jelas mana yang boleh diketik
+  /* --- Sel isian & sel terkunci ------------------------------------
+   * Kolom turunan diberi latar abu dan dikunci: sistem yang menghitung,
+   * jadi apa pun yang diketik di sana diabaikan saat upload. */
+  function writeDataCell(row: number, col: number, m: Metric, values: ValueMap) {
+    const cell = ws.getCell(row, col);
+    if (m.kind === 'derived') {
+      cell.value = null;
+      cell.fill = solid('FFF1F3F5');
+    } else {
+      cell.value = num(values[m.key]);
+      cell.numFmt = m.format === 'percent' ? PERCENT : ACCOUNTING_2DP;
       cell.fill = solid('FFFFFFFF');
-    });
-    for (let col = 1; col <= lastCol; col++) {
-      const cell = ws.getCell(r, col);
-      cell.font = { name: 'Calibri', size: 10, bold: col === 1 };
+    }
+    cell.font = { name: 'Calibri', size: 10 };
+    cell.border = { top: HAIR, bottom: HAIR, left: HAIR, right: HAIR };
+  }
+
+  /* --- Baris 7: cabang --- */
+  const branchValues = input.branchValues ?? {};
+  ws.getCell(R_BRANCH, 1).value = 1;
+  ws.getCell(R_BRANCH, 2).value = input.branchCode;
+  ws.getCell(R_BRANCH, 3).value = input.branchName;
+  for (const c of used) {
+    const m = byColumn.get(c)!;
+    // Di baris cabang hanya kolom tingkat cabang yang diisi; sisanya
+    // dijumlah sistem dari baris salesman, persis seperti file aslinya.
+    if (m.level === 'branch') writeDataCell(R_BRANCH, c, m, branchValues);
+    else {
+      const cell = ws.getCell(R_BRANCH, c);
+      cell.fill = solid('FFF1F3F5');
       cell.border = { top: HAIR, bottom: HAIR, left: HAIR, right: HAIR };
     }
-    ws.getCell(r, 2).font = { name: 'Consolas', size: 7, color: { argb: 'FFAAB2BB' } };
+  }
+  for (let c = 1; c <= 3; c++) {
+    const cell = ws.getCell(R_BRANCH, c);
+    cell.font = { name: 'Calibri', size: 10, bold: true };
+    cell.fill = solid(FILL.branchLabel);
+    cell.border = { top: THIN, bottom: THIN, left: THIN, right: THIN };
+  }
+
+  /* --- Baris 8+: salesman --- */
+  let r = R_BRANCH + 1;
+  for (const row of input.rows) {
+    ws.getCell(r, 3).value = row.salesmanName;
+    ws.getCell(r, 3).font = { name: 'Calibri', size: 10, bold: true };
+    ws.getCell(r, 3).border = { top: HAIR, bottom: HAIR, left: HAIR, right: HAIR };
+    for (const c of used) {
+      const m = byColumn.get(c)!;
+      // Kolom tingkat cabang dikosongkan di baris salesman — di file asli
+      // pun selalu kosong (dicek langsung di Sampit.xlsx).
+      if (m.level === 'branch') {
+        const cell = ws.getCell(r, c);
+        cell.fill = solid('FFF1F3F5');
+        cell.border = { top: HAIR, bottom: HAIR, left: HAIR, right: HAIR };
+        continue;
+      }
+      writeDataCell(r, c, m, row.values);
+    }
     r += 1;
   }
 
-  ws.getColumn(1).width = 30;
-  // Kolom ID dipakai parser untuk mencocokkan salesman secara pasti, tapi
-  // tidak perlu terlihat/diketik user — disembunyikan daripada cuma
-  // "diminta jangan diubah". Tetap ada nilainya dan tetap kebaca parser
-  // (SheetJS membaca kolom tersembunyi seperti biasa).
-  ws.getColumn(2).width = 38;
-  ws.getColumn(2).hidden = true;
-  // Lebar kolom data disamakan dengan file MOS asli (9,453125).
-  inputCols.forEach((_m, i) => {
-    ws.getColumn(IDENT + 1 + i).width = 9.453125;
-  });
+  /* --- Baris penutup TOTAL (dilewati parser, berguna untuk mata) --- */
+  const first = R_BRANCH + 1;
+  const last = r - 1;
+  ws.getCell(r, 1).value = 'TOTAL';
+  for (const c of used) {
+    const m = byColumn.get(c)!;
+    const cell = ws.getCell(r, c);
+    if (m.kind === 'input' && m.level !== 'branch' && last >= first) {
+      const letter = m.excel as string;
+      cell.value = { formula: `SUM(${letter}${first}:${letter}${last})` };
+      cell.numFmt = ACCOUNTING_2DP;
+    }
+    cell.fill = solid(FILL.grandValue);
+    cell.border = { top: THIN, bottom: THIN, left: THIN, right: THIN };
+  }
+  for (let c = 1; c <= 3; c++) {
+    const cell = ws.getCell(r, c);
+    cell.font = { name: 'Calibri', size: 10, bold: true };
+    cell.fill = solid(FILL.grandLabel);
+    cell.border = { top: THIN, bottom: THIN, left: THIN, right: THIN };
+  }
+
+  /* --- Lebar & kolom yang tidak dipakai --- */
+  ws.getColumn(1).width = 5.45;
+  ws.getColumn(2).width = 9.45;
+  ws.getColumn(3).width = 34;
+  for (let c = 4; c <= lastCol; c++) {
+    ws.getColumn(c).width = 9.453125;
+    // Kolom di luar daftar metrik (D–M, AZ–BL) tidak dipakai sistem.
+    // Tetap ada supaya huruf kolom tidak bergeser, tapi disembunyikan.
+    if (!byColumn.has(c)) ws.getColumn(c).hidden = true;
+  }
 
   /* Sheet petunjuk */
   const guide = wb.addWorksheet('PETUNJUK');
-  guide.columns = [
-    { width: 6 },
-    { width: 26 },
-    { width: 44 },
-    { width: 30 },
-    { width: 14 },
-  ];
+  guide.columns = [{ width: 6 }, { width: 26 }, { width: 44 }, { width: 30 }, { width: 14 }];
 
   const steps = [
-    'PLAN SALES MASTER, OL MIN PRTM, dan ACTUAL SALES TIDAK ADA di template ini — ketiganya' +
-      ' diisi sekali untuk seluruh cabang lewat panel "Data Tingkat Cabang" di halaman Input' +
-      ' website, bukan per salesman.',
-    'Isi HANYA sel angka di sheet INPUT. Jangan menambah atau menghapus baris dan kolom.',
-    'Ada kolom ID salesman yang disembunyikan (kolom B) untuk mencocokkan data — biarkan' +
-      ' tetap tersembunyi, jangan di-unhide atau diisi ulang.',
-    'Baris 3-4-5 adalah header bertingkat, dibuat sama persis dengan sheet MOS di file' +
-      ' Excel cabang. Baris ke-6 berisi kunci teknis kolom — jangan diubah atau dihapus.',
+    'File ini berformat SAMA dengan file MOS yang biasa Anda pakai. Anda juga boleh' +
+      ' langsung mengunggah file MOS cabang Anda sendiri tanpa menyalin datanya ke sini.',
+    `Sistem membaca sheet "${sheetName}", mencari baris cabang ${input.branchName}` +
+      ` (${input.branchCode}) di kolom PLANT/BRANCH, lalu membaca baris salesman di bawahnya.`,
+    'Nama salesman di kolom C dipakai untuk mencocokkan data — jangan diubah ejaannya.',
+    'PLAN SALES MASTER, OL MIN PRTM, dan ACTUAL SALES diisi SEKALI di baris cabang' +
+      ' (baris 7), bukan di baris salesman — persis seperti file MOS asli.',
+    'Sel berlatar abu adalah kolom hasil perhitungan. Sistem yang mengisinya; apa pun' +
+      ' yang diketik di sana diabaikan, jadi rumus tidak bisa rusak atau jadi #REF!.',
     'Kosongkan sel bila memang tidak ada angka. Jangan diisi teks seperti "-" atau "n/a".',
-    'Kolom hasil perhitungan tidak ada di template karena dihitung otomatis oleh sistem.',
+    'Beberapa kolom disembunyikan (D–M, AZ–BL) karena tidak dipakai sistem. Biarkan saja —' +
+      ' kolom itu menjaga posisi huruf kolom agar tetap cocok dengan file asli.',
     'Setelah upload, sistem menampilkan preview perubahan. Data baru tersimpan setelah Anda menekan tombol konfirmasi.',
     'Bila ada angka minggu sebelumnya yang berubah, Anda akan diminta mengisi alasan perubahan.',
   ];
@@ -520,9 +586,9 @@ export async function buildBranchTemplateWorkbook(input: TemplateInput): Promise
   guide.getCell(1, 1).value = 'PETUNJUK PENGISIAN';
   guide.getCell(1, 1).font = { name: 'Calibri', size: 14, bold: true };
 
-  steps.forEach((s, i) => {
-    const row = 3 + i;
-    guide.getCell(row, 1).value = `${i + 1}.`;
+  steps.forEach((s, idx) => {
+    const row = 3 + idx;
+    guide.getCell(row, 1).value = `${idx + 1}.`;
     guide.getCell(row, 1).alignment = { vertical: 'top' };
     guide.mergeCells(row, 2, row, 5);
     const cell = guide.getCell(row, 2);
@@ -536,21 +602,21 @@ export async function buildBranchTemplateWorkbook(input: TemplateInput): Promise
   guide.getCell(listStart, 1).font = { name: 'Calibri', size: 12, bold: true };
 
   const headerRow = listStart + 1;
-  ['', 'Kunci teknis', 'Label', 'Grup', 'Kolom Excel lama'].forEach((h, i) => {
-    const cell = guide.getCell(headerRow, i + 1);
+  ['', 'Kolom Excel', 'Label', 'Diisi oleh', 'Tingkat'].forEach((h, idx) => {
+    const cell = guide.getCell(headerRow, idx + 1);
     cell.value = h;
     cell.font = { name: 'Calibri', size: 9, bold: true };
     cell.fill = solid(FILL.identity);
     cell.border = { top: THIN, bottom: THIN, left: THIN, right: THIN };
   });
 
-  inputCols.forEach((m, i) => {
-    const row = headerRow + 1 + i;
-    guide.getCell(row, 2).value = m.key;
+  cols.forEach((m, idx) => {
+    const row = headerRow + 1 + idx;
+    guide.getCell(row, 2).value = m.excel ?? '';
     guide.getCell(row, 2).font = { name: 'Consolas', size: 9 };
     guide.getCell(row, 3).value = m.label;
-    guide.getCell(row, 4).value = m.group;
-    guide.getCell(row, 5).value = m.excel ?? '';
+    guide.getCell(row, 4).value = m.kind === 'derived' ? 'Sistem (otomatis)' : 'Cabang';
+    guide.getCell(row, 5).value = m.level === 'branch' ? 'Baris cabang' : 'Baris salesman';
     for (let col = 2; col <= 5; col++) {
       guide.getCell(row, col).border = { top: HAIR, bottom: HAIR, left: HAIR, right: HAIR };
     }
