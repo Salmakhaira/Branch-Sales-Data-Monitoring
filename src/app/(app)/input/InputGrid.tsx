@@ -227,21 +227,44 @@ export default function InputGrid({
   }
 
   /** Satu sel input, dipakai baris cabang (tabel ringkas) maupun baris
-   *  salesman (grid) — perilaku terkunci/berubah/wajib-alasan identik. */
-  function renderInputCell(rowId: string, c: Metric, raw: number | null | undefined) {
+   *  salesman (grid) — perilaku terkunci/berubah/wajib-alasan identik.
+   *
+   *  `requiredEmpty` = true bila kolom ini wajib diisi untuk konteks
+   *  saat ini (3 field cabang: selalu; kolom salesman: hanya kolom
+   *  minggu yang sedang dilaporkan) DAN belum ada isinya — sel ditandai
+   *  kuning, warna yang sama dengan 🟨 di halaman Ringkasan, supaya user
+   *  langsung tahu mana yang masih harus diisi. */
+  function renderInputCell(
+    rowId: string,
+    c: Metric,
+    raw: number | null | undefined,
+    requiredEmpty = false,
+  ) {
     const cellKey = `${rowId}:${c.key}`;
     const locked = isFieldLocked(c.key, lastSubmittedWeek);
     const dirty = dirtyCells.has(cellKey);
     const needsReason = needsReasonCells.has(cellKey);
+    const empty = raw === null || raw === undefined;
+    const highlightRequired = requiredEmpty && empty && !dirty && !needsReason;
 
     return (
       <td
         key={c.key}
-        className={`p-0 ${dirty || needsReason ? 'cell-changed' : locked ? 'cell-locked' : ''}`}
+        className={`p-0 ${
+          dirty || needsReason
+            ? 'cell-changed'
+            : highlightRequired
+              ? 'cell-required'
+              : locked
+                ? 'cell-locked'
+                : ''
+        }`}
         title={
-          locked
-            ? `Angka ini sudah dilaporkan pada Minggu ${lastSubmittedWeek}. Mengubahnya memerlukan alasan.`
-            : undefined
+          highlightRequired
+            ? 'Wajib diisi.'
+            : locked
+              ? `Angka ini sudah dilaporkan pada Minggu ${lastSubmittedWeek}. Mengubahnya memerlukan alasan.`
+              : undefined
         }
       >
         <input
@@ -264,6 +287,7 @@ export default function InputGrid({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600">
           <LegendSwatch className="bg-white ring-1 ring-slate-200" label="Bisa diisi" />
+          <LegendSwatch className="cell-required" label="Wajib diisi, belum diisi" />
           <LegendSwatch
             className="cell-locked ring-1 ring-amber-200"
             label="Terkunci — ubah = wajib alasan"
@@ -329,7 +353,8 @@ export default function InputGrid({
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <h3 className="text-sm font-semibold text-slate-900">Data Tingkat Cabang</h3>
         <p className="mt-0.5 text-[11px] text-slate-500">
-          Diisi sekali untuk seluruh cabang, bukan per salesman.
+          Diisi sekali per bulan untuk seluruh cabang, bebas kapan saja — bukan per salesman.
+          🟨 Kuning = belum diisi.
         </p>
         <table className="mt-3 w-full max-w-xs text-xs">
           <tbody>
@@ -338,7 +363,7 @@ export default function InputGrid({
               return (
                 <tr key={key} className="border-b border-slate-100 last:border-0">
                   <td className="py-1.5 pr-3 font-medium text-slate-600">{c.label}</td>
-                  {renderInputCell('branch', c, branchValues[key])}
+                  {renderInputCell('branch', c, branchValues[key], true)}
                 </tr>
               );
             })}
@@ -430,7 +455,12 @@ export default function InputGrid({
                       </td>
                     );
                   }
-                  return renderInputCell(s.id, c, values[s.id]?.[c.key]);
+                  return renderInputCell(
+                    s.id,
+                    c,
+                    values[s.id]?.[c.key],
+                    c.scope === 'weekly' && c.week === reportingWeek,
+                  );
                 })}
               </tr>
             ))}
