@@ -10,7 +10,7 @@ import {
   listPeriods,
 } from '@/lib/report';
 import { aggregateRows, computeRow, type ValueMap } from '@/lib/metrics';
-import { fmtDateTime, fmtNumber, monthName, periodLabel } from '@/lib/format';
+import { fmtDateTime, fmtNumber, fmtWhole, monthName, periodLabel } from '@/lib/format';
 import { describeWeek } from '@/lib/period';
 import PeriodPicker from '@/components/PeriodPicker';
 import RevisionMonitor from '@/components/RevisionMonitor';
@@ -70,6 +70,23 @@ export default async function SummaryPage({
     (submissions.get(b.id)?.weeks ?? []).includes(period.current_week),
   ).length;
 
+  // "Update terakhir" per cabang: sebelumnya cuma memakai jam SUBMIT
+  // (branch_submissions.submitted_at), jadi tidak ikut maju kalau ada
+  // koreksi sesudahnya ke sel yang sudah terkunci (jalur wajib-alasan) —
+  // padahal itu jelas-jelas perubahan data yang lebih baru. Sekarang
+  // dipakai jam TERBARU dari tiga sumber: submit, dan updated_at di
+  // report_entries/report_branch_entries (naik setiap kali sel manapun
+  // disimpan, terkunci atau tidak).
+  const lastActivityByBranch = new Map<string, string>();
+  const bumpActivity = (branchId: string, ts: string | null | undefined) => {
+    if (!ts) return;
+    const cur = lastActivityByBranch.get(branchId);
+    if (!cur || ts > cur) lastActivityByBranch.set(branchId, ts);
+  };
+  for (const e of entries) bumpActivity(e.branch_id, e.updated_at);
+  for (const b of branches) bumpActivity(b.id, branchEntries.get(b.id)?.updated_at);
+  for (const [branchId, s] of submissions) bumpActivity(branchId, s.lastAt);
+
   const supabase = createClient();
   const { count: openRevisions } = await supabase
     .from('entry_revisions')
@@ -128,7 +145,7 @@ export default async function SummaryPage({
             diganti TOTAL PO OUTLOOK yang masih ada dan sama informatifnya. */}
         <Stat
           label="Total PO Outlook"
-          value={fmtNumber(national.total_po_outlook)}
+          value={fmtWhole(national.total_po_outlook)}
           sub="Nasional, minggu berjalan"
         />
         <Stat
@@ -144,8 +161,7 @@ export default async function SummaryPage({
         <div className="border-b border-slate-200 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-900">Status Pengisian per Cabang</h3>
           <p className="text-xs text-slate-500">
-            🟩 Hijau = sudah submit dan angka terkunci
-            🟨 Kuning = belum diisi
+            Kotak berwarna = minggu tersebut sudah di-submit dan angkanya terkunci.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -201,7 +217,7 @@ export default async function SummaryPage({
                       {fmtNumber(agg.actual_sales)}
                     </td>
                     <td className="px-5 py-2.5 text-right text-xs text-slate-500">
-                      {fmtDateTime(sub?.lastAt) || '—'}
+                      {fmtDateTime(lastActivityByBranch.get(b.id)) || '—'}
                     </td>
                   </tr>
                 );
