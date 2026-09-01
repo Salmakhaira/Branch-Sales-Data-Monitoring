@@ -6,6 +6,7 @@ import {
   orderedMetrics,
   aggregateRows,
   BRANCH_INPUT_KEYS,
+  METRIC_BY_KEY,
   SALESMAN_INPUT_KEYS,
   computeRow,
   isFieldLocked,
@@ -32,21 +33,11 @@ interface Props {
   initialValues: Values;
   snapshotValues: Values;
   /** PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES — satu set nilai per
-   *  cabang, ditampilkan sebagai SATU baris tersendiri di atas baris
-   *  salesman (persis posisi baris cabang di file Excel asli), bukan
-   *  panel terpisah lagi. */
+   *  cabang, ditampilkan sebagai tabel ringkas 3 baris (label + nilai) di
+   *  atas grid salesman, bukan panel kartu terpisah lagi — tapi tetap
+   *  disimpan bersamaan lewat satu tombol Simpan yang sama. */
   branchInitialValues: ValueMap;
   branchSnapshotValues: ValueMap;
-}
-
-/** Kolom ini berlaku (punya nilai) di baris bertipe `kind`? Kolom tingkat
- *  cabang (PLAN SALES MASTER dkk, plus turunannya BALANCE PRTM/RATIO
- *  ACTUAL) cuma berarti di baris cabang; kolom tingkat salesman cuma
- *  berarti di baris salesman; baris TOTAL menampilkan semuanya. */
-function columnAppliesTo(col: Metric, kind: 'branch' | 'salesman' | 'total'): boolean {
-  if (kind === 'total') return true;
-  const isBranchCol = col.level === 'branch';
-  return kind === 'branch' ? isBranchCol : !isBranchCol;
 }
 
 export default function InputGrid({
@@ -72,9 +63,13 @@ export default function InputGrid({
 
   /* Seluruh kolom W1–W4 selalu tampil, supaya cabang bebas mengisi ke
    * depan maupun memperbaiki ke belakang. Yang terkunci ditandai warna.
-   * Kolom tingkat cabang (PLAN SALES MASTER dkk) ikut di sini juga —
-   * hanya berlaku di baris cabang, lihat columnAppliesTo(). */
-  const columns = useMemo(() => orderedMetrics((m) => m.inGrid), []);
+   * PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES (dan turunannya BALANCE
+   * PRTM/RATIO ACTUAL) tidak ikut di sini — itu data TINGKAT CABANG,
+   * ditampilkan di tabel ringkas terpisah di atas grid ini. */
+  const columns = useMemo(
+    () => orderedMetrics((m) => m.inGrid && (m.level ?? 'salesman') === 'salesman'),
+    [],
+  );
 
   /* Header BERTINGKAT TIGA, sama seperti sheet MOS di file Excel cabang:
    *   baris 1 = grup besar   (OUTLOOK PRTM / OUTLOOK REVENUE TM)
@@ -83,9 +78,10 @@ export default function InputGrid({
    * Kolom tanpa rincian: judulnya memanjang ke bawah (rowSpan 2). */
   const headerRows = useMemo(() => buildMosHeaderRows(columns), [columns]);
 
-  /* Sel yang belum disimpan — kunci 'branch:<key>' untuk baris cabang,
-   * '<salesmanId>:<key>' untuk baris salesman, satu Set gabungan supaya
-   * tombol Simpan & indikator jumlah sel mencakup keduanya sekaligus. */
+  /* Sel yang belum disimpan — kunci 'branch:<key>' untuk 3 baris ringkas
+   * cabang, '<salesmanId>:<key>' untuk baris salesman di grid, satu Set
+   * gabungan supaya tombol Simpan & indikator jumlah sel mencakup
+   * keduanya sekaligus (satu tombol Simpan untuk semuanya). */
   const dirtyCells = useMemo(() => {
     const set = new Set<string>();
     for (const s of salesmen) {
@@ -133,17 +129,14 @@ export default function InputGrid({
     return out;
   }, [values, salesmen, reportingWeek]);
 
-  /* BALANCE PRTM & RATIO ACTUAL/PLAN baris cabang, dihitung dari
-   * branchValues (bukan dari salesman mana pun). */
+  /* BALANCE PRTM & RATIO ACTUAL/PLAN — turunan dari branchValues (bukan
+   * dari salesman mana pun), ditampilkan sebagai info kecil di bawah
+   * tabel ringkas cabang. */
   const branchComputed = useMemo(
     () => computeRow(branchValues, { week: reportingWeek }),
     [branchValues, reportingWeek],
   );
 
-  /* Baris TOTAL = seluruh baris salesman + baris cabang dijumlahkan lalu
-   * kolom turunan dihitung ULANG dari hasil penjumlahan — persis logika
-   * yang sama dipakai rekap nasional & dashboard (aggregateRows), supaya
-   * tidak ada dua cara berbeda menghitung TOTAL di aplikasi ini. */
   const branchTotal = useMemo<ValueMap>(
     () =>
       aggregateRows(
@@ -233,8 +226,8 @@ export default function InputGrid({
     if (res.ok) router.refresh();
   }
 
-  /** Satu sel input, dipakai baris cabang maupun baris salesman —
-   *  perilaku terkunci/berubah/wajib-alasan identik untuk keduanya. */
+  /** Satu sel input, dipakai baris cabang (tabel ringkas) maupun baris
+   *  salesman (grid) — perilaku terkunci/berubah/wajib-alasan identik. */
   function renderInputCell(rowId: string, c: Metric, raw: number | null | undefined) {
     const cellKey = `${rowId}:${c.key}`;
     const locked = isFieldLocked(c.key, lastSubmittedWeek);
@@ -328,7 +321,46 @@ export default function InputGrid({
         </p>
       )}
 
-      {/* Grid */}
+      {/* Tabel ringkas DATA TINGKAT CABANG — 3 baris (label + nilai),
+          bukan bagian dari grid salesman yang lebar, karena tiga angka ini
+          cuma diisi SEKALI untuk seluruh cabang, bebas kapan saja dalam
+          bulan berjalan. Tetap disimpan lewat tombol "Simpan" yang sama
+          di toolbar atas (satu kali klik, satu jejak audit gabungan). */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-semibold text-slate-900">Data Tingkat Cabang</h3>
+        <p className="mt-0.5 text-[11px] text-slate-500">
+          Diisi sekali untuk seluruh cabang, bukan per salesman.
+        </p>
+        <table className="mt-3 w-full max-w-xs text-xs">
+          <tbody>
+            {BRANCH_INPUT_KEYS.map((key) => {
+              const c = METRIC_BY_KEY[key];
+              return (
+                <tr key={key} className="border-b border-slate-100 last:border-0">
+                  <td className="py-1.5 pr-3 font-medium text-slate-600">{c.label}</td>
+                  {renderInputCell('branch', c, branchValues[key])}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
+          <span>
+            BALANCE PRTM (OL - PLAN PRTM):{' '}
+            <strong className="tabular-nums text-slate-900">
+              {fmtNumber(branchComputed.balance_prtm)}
+            </strong>
+          </span>
+          <span>
+            RATIO ACTUAL / PLAN:{' '}
+            <strong className="tabular-nums text-slate-900">
+              {fmtPercent(branchComputed.ratio_actual)}
+            </strong>
+          </span>
+        </div>
+      </div>
+
+      {/* Grid salesman */}
       <div className="scroll-x rounded-xl border border-slate-200 bg-white">
         <table className="grid-table w-full text-xs">
           <thead>
@@ -386,47 +418,10 @@ export default function InputGrid({
             </tr>
           </thead>
           <tbody>
-            {/* Baris CABANG — persis posisi baris cabang di file Excel
-                asli: di atas, sebelum baris salesman. Hanya PLAN SALES
-                MASTER/OL MIN PRTM/ACTUAL SALES yang bisa diisi di sini;
-                kolom lain (punya salesman) didash. Diisi SEKALI untuk
-                seluruh cabang, bebas kapan saja dalam bulan berjalan —
-                bukan per minggu, jadi tidak ada kolom W1-W4 untuknya. */}
-            <tr className="bg-sky-50/60">
-              <td className="sticky-col bg-sky-50 px-3 py-1.5 font-medium text-sky-900">
-                {branchName} <span className="font-normal text-sky-700">· data cabang</span>
-              </td>
-              {columns.map((c) => {
-                if (!columnAppliesTo(c, 'branch')) {
-                  return (
-                    <td key={c.key} className="bg-sky-50/60 px-2 py-1.5 text-right text-slate-300">
-                      —
-                    </td>
-                  );
-                }
-                if (c.kind === 'derived') {
-                  const v = branchComputed[c.key];
-                  return (
-                    <td key={c.key} className="cell-derived">
-                      {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
-                    </td>
-                  );
-                }
-                return renderInputCell('branch', c, branchValues[c.key]);
-              })}
-            </tr>
-
             {salesmen.map((s) => (
               <tr key={s.id} className="hover:bg-slate-50/60">
                 <td className="sticky-col px-3 py-1.5 font-medium text-slate-800">{s.name}</td>
                 {columns.map((c) => {
-                  if (!columnAppliesTo(c, 'salesman')) {
-                    return (
-                      <td key={c.key} className="px-2 py-1.5 text-right text-slate-200">
-                        —
-                      </td>
-                    );
-                  }
                   if (c.kind === 'derived') {
                     const v = computedRows[s.id]?.[c.key];
                     return (
