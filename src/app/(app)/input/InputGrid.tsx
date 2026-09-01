@@ -4,11 +4,13 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   orderedMetrics,
-  SALESMAN_GRID_KEYS,
+  aggregateRows,
+  BRANCH_INPUT_KEYS,
   SALESMAN_INPUT_KEYS,
   computeRow,
   isFieldLocked,
   nearlyEqual,
+  type Metric,
   type ValueMap,
 } from '@/lib/metrics';
 import { fmtNumber, fmtPercent, parseNumberInput } from '@/lib/format';
@@ -29,6 +31,22 @@ interface Props {
   salesmen: { id: string; name: string }[];
   initialValues: Values;
   snapshotValues: Values;
+  /** PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES — satu set nilai per
+   *  cabang, ditampilkan sebagai SATU baris tersendiri di atas baris
+   *  salesman (persis posisi baris cabang di file Excel asli), bukan
+   *  panel terpisah lagi. */
+  branchInitialValues: ValueMap;
+  branchSnapshotValues: ValueMap;
+}
+
+/** Kolom ini berlaku (punya nilai) di baris bertipe `kind`? Kolom tingkat
+ *  cabang (PLAN SALES MASTER dkk, plus turunannya BALANCE PRTM/RATIO
+ *  ACTUAL) cuma berarti di baris cabang; kolom tingkat salesman cuma
+ *  berarti di baris salesman; baris TOTAL menampilkan semuanya. */
+function columnAppliesTo(col: Metric, kind: 'branch' | 'salesman' | 'total'): boolean {
+  if (kind === 'total') return true;
+  const isBranchCol = col.level === 'branch';
+  return kind === 'branch' ? isBranchCol : !isBranchCol;
 }
 
 export default function InputGrid({
@@ -42,22 +60,21 @@ export default function InputGrid({
   salesmen,
   initialValues,
   snapshotValues,
+  branchInitialValues,
+  branchSnapshotValues,
 }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initialValues);
+  const [branchValues, setBranchValues] = useState<ValueMap>(branchInitialValues);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [conflicts, setConflicts] = useState<SaveConflict[] | null>(null);
 
   /* Seluruh kolom W1–W4 selalu tampil, supaya cabang bebas mengisi ke
    * depan maupun memperbaiki ke belakang. Yang terkunci ditandai warna.
-   * PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES (dan turunannya BALANCE
-   * PRTM/RATIO ACTUAL) tidak ikut di sini — itu data TINGKAT CABANG,
-   * diisi sekali lewat panel di atas grid, bukan per salesman. */
-  const columns = useMemo(
-    () => orderedMetrics((m) => m.inGrid && (m.level ?? 'salesman') === 'salesman'),
-    [],
-  );
+   * Kolom tingkat cabang (PLAN SALES MASTER dkk) ikut di sini juga —
+   * hanya berlaku di baris cabang, lihat columnAppliesTo(). */
+  const columns = useMemo(() => orderedMetrics((m) => m.inGrid), []);
 
   /* Header BERTINGKAT TIGA, sama seperti sheet MOS di file Excel cabang:
    *   baris 1 = grup besar   (OUTLOOK PRTM / OUTLOOK REVENUE TM)
@@ -66,6 +83,9 @@ export default function InputGrid({
    * Kolom tanpa rincian: judulnya memanjang ke bawah (rowSpan 2). */
   const headerRows = useMemo(() => buildMosHeaderRows(columns), [columns]);
 
+  /* Sel yang belum disimpan — kunci 'branch:<key>' untuk baris cabang,
+   * '<salesmanId>:<key>' untuk baris salesman, satu Set gabungan supaya
+   * tombol Simpan & indikator jumlah sel mencakup keduanya sekaligus. */
   const dirtyCells = useMemo(() => {
     const set = new Set<string>();
     for (const s of salesmen) {
@@ -75,8 +95,11 @@ export default function InputGrid({
         if (!nearlyEqual(now[key], before[key])) set.add(`${s.id}:${key}`);
       }
     }
+    for (const key of BRANCH_INPUT_KEYS) {
+      if (!nearlyEqual(branchValues[key], branchInitialValues[key])) set.add(`branch:${key}`);
+    }
     return set;
-  }, [values, initialValues, salesmen]);
+  }, [values, initialValues, salesmen, branchValues, branchInitialValues]);
 
   /** Sel yang perubahannya akan memicu permintaan alasan. */
   const needsReasonCells = useMemo(() => {
@@ -90,8 +113,12 @@ export default function InputGrid({
         if (!nearlyEqual(now[key], snap[key])) set.add(`${s.id}:${key}`);
       }
     }
+    for (const key of BRANCH_INPUT_KEYS) {
+      if (!isFieldLocked(key, lastSubmittedWeek)) continue;
+      if (!nearlyEqual(branchValues[key], branchSnapshotValues[key])) set.add(`branch:${key}`);
+    }
     return set;
-  }, [values, snapshotValues, salesmen, lastSubmittedWeek]);
+  }, [values, snapshotValues, salesmen, lastSubmittedWeek, branchValues, branchSnapshotValues]);
 
   /* Kolom turunan dihitung memakai minggu yang SEDANG DILAPORKAN,
    * bukan minggu kalender — sehingga TOTAL OL PRTM dsb. mengambil kolom
@@ -106,27 +133,36 @@ export default function InputGrid({
     return out;
   }, [values, salesmen, reportingWeek]);
 
-  const branchTotal = useMemo<ValueMap>(() => {
-    const sum: ValueMap = {};
-    for (const key of SALESMAN_GRID_KEYS) {
-      sum[key] = salesmen.reduce((acc, s) => {
-        const v = computedRows[s.id]?.[key];
-        return acc + (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-      }, 0);
-    }
-    // Kolom rasio tidak boleh dijumlah — hitung ulang dari total.
-    // (RATIO ACTUAL/PLAN sendiri tingkat cabang, tapi tetap dihitung ulang
-    // di sini agar baris TOTAL tidak pernah menampilkan hasil penjumlahan.)
-    const recomputed = computeRow(sum, { week: reportingWeek });
-    return { ...sum, ratio_actual: recomputed.ratio_actual };
-  }, [computedRows, salesmen, reportingWeek]);
+  /* BALANCE PRTM & RATIO ACTUAL/PLAN baris cabang, dihitung dari
+   * branchValues (bukan dari salesman mana pun). */
+  const branchComputed = useMemo(
+    () => computeRow(branchValues, { week: reportingWeek }),
+    [branchValues, reportingWeek],
+  );
 
-  function setCell(salesmanId: string, key: string, raw: string) {
+  /* Baris TOTAL = seluruh baris salesman + baris cabang dijumlahkan lalu
+   * kolom turunan dihitung ULANG dari hasil penjumlahan — persis logika
+   * yang sama dipakai rekap nasional & dashboard (aggregateRows), supaya
+   * tidak ada dua cara berbeda menghitung TOTAL di aplikasi ini. */
+  const branchTotal = useMemo<ValueMap>(
+    () =>
+      aggregateRows(
+        [...salesmen.map((s) => values[s.id] ?? {}), branchValues],
+        { week: reportingWeek },
+      ),
+    [values, salesmen, branchValues, reportingWeek],
+  );
+
+  function setCell(rowId: string, key: string, raw: string) {
     const parsed = parseNumberInput(raw);
-    setValues((prev) => ({
-      ...prev,
-      [salesmanId]: { ...(prev[salesmanId] ?? {}), [key]: parsed },
-    }));
+    if (rowId === 'branch') {
+      setBranchValues((prev) => ({ ...prev, [key]: parsed }));
+    } else {
+      setValues((prev) => ({
+        ...prev,
+        [rowId]: { ...(prev[rowId] ?? {}), [key]: parsed },
+      }));
+    }
   }
 
   async function save(reasons?: Record<string, ReasonInput>) {
@@ -141,6 +177,7 @@ export default function InputGrid({
         branchId,
         source: 'grid' as const,
         rows: salesmen.map((s) => ({ salesmanId: s.id, values: values[s.id] ?? {} })),
+        branchValues,
         reasons,
       }),
     });
@@ -194,6 +231,38 @@ export default function InputGrid({
         : { tone: 'err', text: data.error ?? 'Gagal submit.' },
     );
     if (res.ok) router.refresh();
+  }
+
+  /** Satu sel input, dipakai baris cabang maupun baris salesman —
+   *  perilaku terkunci/berubah/wajib-alasan identik untuk keduanya. */
+  function renderInputCell(rowId: string, c: Metric, raw: number | null | undefined) {
+    const cellKey = `${rowId}:${c.key}`;
+    const locked = isFieldLocked(c.key, lastSubmittedWeek);
+    const dirty = dirtyCells.has(cellKey);
+    const needsReason = needsReasonCells.has(cellKey);
+
+    return (
+      <td
+        key={c.key}
+        className={`p-0 ${dirty || needsReason ? 'cell-changed' : locked ? 'cell-locked' : ''}`}
+        title={
+          locked
+            ? `Angka ini sudah dilaporkan pada Minggu ${lastSubmittedWeek}. Mengubahnya memerlukan alasan.`
+            : undefined
+        }
+      >
+        <input
+          className="cell-input"
+          inputMode="decimal"
+          readOnly={readOnly}
+          defaultValue={raw === null || raw === undefined ? '' : String(raw)}
+          onBlur={(e) => setCell(rowId, c.key, e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </td>
+    );
   }
 
   return (
@@ -317,12 +386,47 @@ export default function InputGrid({
             </tr>
           </thead>
           <tbody>
+            {/* Baris CABANG — persis posisi baris cabang di file Excel
+                asli: di atas, sebelum baris salesman. Hanya PLAN SALES
+                MASTER/OL MIN PRTM/ACTUAL SALES yang bisa diisi di sini;
+                kolom lain (punya salesman) didash. Diisi SEKALI untuk
+                seluruh cabang, bebas kapan saja dalam bulan berjalan —
+                bukan per minggu, jadi tidak ada kolom W1-W4 untuknya. */}
+            <tr className="bg-sky-50/60">
+              <td className="sticky-col bg-sky-50 px-3 py-1.5 font-medium text-sky-900">
+                {branchName} <span className="font-normal text-sky-700">· data cabang</span>
+              </td>
+              {columns.map((c) => {
+                if (!columnAppliesTo(c, 'branch')) {
+                  return (
+                    <td key={c.key} className="bg-sky-50/60 px-2 py-1.5 text-right text-slate-300">
+                      —
+                    </td>
+                  );
+                }
+                if (c.kind === 'derived') {
+                  const v = branchComputed[c.key];
+                  return (
+                    <td key={c.key} className="cell-derived">
+                      {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                    </td>
+                  );
+                }
+                return renderInputCell('branch', c, branchValues[c.key]);
+              })}
+            </tr>
+
             {salesmen.map((s) => (
               <tr key={s.id} className="hover:bg-slate-50/60">
                 <td className="sticky-col px-3 py-1.5 font-medium text-slate-800">{s.name}</td>
                 {columns.map((c) => {
-                  const cellKey = `${s.id}:${c.key}`;
-
+                  if (!columnAppliesTo(c, 'salesman')) {
+                    return (
+                      <td key={c.key} className="px-2 py-1.5 text-right text-slate-200">
+                        —
+                      </td>
+                    );
+                  }
                   if (c.kind === 'derived') {
                     const v = computedRows[s.id]?.[c.key];
                     return (
@@ -331,36 +435,7 @@ export default function InputGrid({
                       </td>
                     );
                   }
-
-                  const locked = isFieldLocked(c.key, lastSubmittedWeek);
-                  const dirty = dirtyCells.has(cellKey);
-                  const needsReason = needsReasonCells.has(cellKey);
-                  const raw = values[s.id]?.[c.key];
-
-                  return (
-                    <td
-                      key={c.key}
-                      className={`p-0 ${
-                        dirty || needsReason ? 'cell-changed' : locked ? 'cell-locked' : ''
-                      }`}
-                      title={
-                        locked
-                          ? `Angka ini sudah dilaporkan pada Minggu ${lastSubmittedWeek}. Mengubahnya memerlukan alasan.`
-                          : undefined
-                      }
-                    >
-                      <input
-                        className="cell-input"
-                        inputMode="decimal"
-                        readOnly={readOnly}
-                        defaultValue={raw === null || raw === undefined ? '' : String(raw)}
-                        onBlur={(e) => setCell(s.id, c.key, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                        }}
-                      />
-                    </td>
-                  );
+                  return renderInputCell(s.id, c, values[s.id]?.[c.key]);
                 })}
               </tr>
             ))}
