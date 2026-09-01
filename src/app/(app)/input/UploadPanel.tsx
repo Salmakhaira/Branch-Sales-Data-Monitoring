@@ -15,7 +15,7 @@ import {
   type ValueMap,
   type Metric,
 } from '@/lib/metrics';
-import { fmtNumber, fmtPercent, monthName } from '@/lib/format';
+import { fmtNumber, fmtPercent } from '@/lib/format';
 import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import ReasonModal, { type ReasonInput } from '@/components/ReasonModal';
 import type { SaveConflict } from '@/lib/types';
@@ -329,20 +329,16 @@ export default function UploadPanel({
     <div className="space-y-4">
       {/* Unggah file MOS apa adanya */}
       <section className="rounded-xl border border-slate-200 bg-white p-5">
-        <h3 className="text-sm font-semibold text-slate-900">
-          Unggah file MOS cabang Anda — apa adanya
-        </h3>
+        <h3 className="text-sm font-semibold text-slate-900">Unggah file MOS cabang Anda</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Pakai file Excel yang selama ini Anda isi, tidak perlu disalin ke template baru. Sistem
-          membaca sheet <strong>{monthName(month)} {year}</strong>. File diperiksa dulu di layar
-          ini — tidak ada yang tersimpan sebelum Anda menekan tombol konfirmasi.
+          Silakan Download Template Excel di bawah kemudian isi dan upload kembali.
         </p>
         <div className="mt-3">
           <a
             href={templateUrl}
             className="text-[11px] font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800"
           >
-            Belum punya filenya? Unduh contoh berformat sama (.xlsx)
+            Template Format Excel MOS
           </a>
         </div>
 
