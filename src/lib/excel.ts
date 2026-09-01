@@ -81,6 +81,19 @@ function normalize(s: string): string {
   return s.trim().toUpperCase().replace(/\s+/g, ' ');
 }
 
+/* Ejaan lama "Nopember" (bukan "November") kadang masih dipakai sebagai
+ * nama sheet di file MOS cabang yang lama, meskipun tampilan sistem
+ * sekarang selalu memakai ejaan baku "November". Supaya upload file lama
+ * tetap bisa menemukan sheet-nya, kedua ejaan diterima saat mencocokkan
+ * nama bulan — hanya November yang beda ejaan lama/baru, bulan lain sama. */
+const MONTH_NAME_ALIASES: Record<number, string[]> = {
+  11: ['NOVEMBER', 'NOPEMBER'],
+};
+
+function monthNameCandidates(month: number): string[] {
+  return MONTH_NAME_ALIASES[month] ?? [monthName(month).toUpperCase()];
+}
+
 /** Ubah isi sel jadi angka. null bila kosong, undefined bila bukan angka. */
 function toNumber(cell: unknown): number | null | undefined {
   if (cell === null || cell === undefined || cell === '') return null;
@@ -118,7 +131,7 @@ function columnIndexByKey(keys: string[]): Map<number, string> {
 function readWorkbook(data: ArrayBuffer, ctx: ParseContext) {
   const wanted = [
     'INPUT',
-    `${monthName(ctx.month)} ${ctx.year}`,
+    ...monthNameCandidates(ctx.month).map((name) => `${name} ${ctx.year}`),
     'MOS',
   ];
 
@@ -145,13 +158,16 @@ function pickSheet(wb: XLSX.WorkBook, ctx: ParseContext): string | null {
   const names = wb.SheetNames.filter((n) => wb.Sheets[n]);
   if (names.length === 0) return null;
 
-  const target = normalize(`${monthName(ctx.month)} ${ctx.year}`);
-  const exact = names.find((n) => normalize(n) === target);
+  const candidates = monthNameCandidates(ctx.month);
+  const targets = candidates.map((name) => normalize(`${name} ${ctx.year}`));
+  const exact = names.find((n) => targets.includes(normalize(n)));
   if (exact) return exact;
 
-  // 'MOS AGUSTUS 2026', 'AGUSTUS 2026 (rev)', dst.
+  // 'MOS AGUSTUS 2026', 'AGUSTUS 2026 (rev)', 'NOPEMBER 2026' (ejaan lama), dst.
   const contains = names.find(
-    (n) => normalize(n).includes(normalize(monthName(ctx.month))) && n.includes(String(ctx.year)),
+    (n) =>
+      candidates.some((name) => normalize(n).includes(normalize(name))) &&
+      n.includes(String(ctx.year)),
   );
   if (contains) return contains;
 
