@@ -49,31 +49,23 @@ export default function ReportWorkspace(props: Props) {
         snapshotValues={props.branchSnapshotValues}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div
-          role="tablist"
-          aria-label="Cara mengisi report"
-          className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5"
-        >
-          <ModeButton
-            active={mode === 'grid'}
-            onClick={() => setMode('grid')}
-            label="Isi Langsung"
-            hint="Ketik di grid ala Excel"
-          />
-          <ModeButton
-            active={mode === 'upload'}
-            onClick={() => setMode('upload')}
-            label="Upload Excel"
-            hint="Unggah file MOS cabang apa adanya"
-          />
-        </div>
-
-        <p className="text-[11px] text-slate-400">
-          {mode === 'grid'
-            ? 'Perubahan tercatat per sel — jejak audit paling rinci.'
-            : 'File diperiksa dan ditampilkan dulu sebelum ada yang tersimpan.'}
-        </p>
+      <div
+        role="tablist"
+        aria-label="Cara mengisi report"
+        className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5"
+      >
+        <ModeButton
+          active={mode === 'grid'}
+          onClick={() => setMode('grid')}
+          label="Isi Langsung"
+          hint="Ketik di grid ala Excel"
+        />
+        <ModeButton
+          active={mode === 'upload'}
+          onClick={() => setMode('upload')}
+          label="Upload Excel"
+          hint="Unggah file MOS cabang apa adanya"
+        />
       </div>
 
       {mode === 'grid' ? (
