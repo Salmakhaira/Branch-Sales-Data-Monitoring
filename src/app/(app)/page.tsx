@@ -144,7 +144,8 @@ export default async function SummaryPage({
         <div className="border-b border-slate-200 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-900">Status Pengisian per Cabang</h3>
           <p className="text-xs text-slate-500">
-            Kotak berwarna = minggu tersebut sudah di-submit dan angkanya terkunci.
+            🟩 Hijau = sudah submit dan angka terkunci
+            🟨 Kuning = belum diisi
           </p>
         </div>
         <div className="overflow-x-auto">
