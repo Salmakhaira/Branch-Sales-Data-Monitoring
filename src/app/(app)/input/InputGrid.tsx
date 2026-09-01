@@ -382,12 +382,6 @@ export default function InputGrid({
         </table>
       </div>
 
-      <p className="text-[11px] text-slate-400">
-        Kolom minggu yang sedang dilaporkan ditandai biru. Kolom bertanda{' '}
-        <span className="font-mono">ƒ</span> dihitung otomatis dari kolom minggu tersebut — rumusnya
-        sama persis dengan file Excel, jadi tidak ada lagi risiko formula rusak atau #REF!.
-      </p>
-
       {conflicts && (
         <ReasonModal
           conflicts={conflicts}
