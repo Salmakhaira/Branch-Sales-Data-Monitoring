@@ -139,19 +139,16 @@ export default async function SummaryPage({
         <Stat
           label="Total OL Revenue"
           value={fmtNumber(national.total_ol_revenue)}
-          sub="Nasional, minggu berjalan"
         />
         {/* RATIO OL/PO sudah dihapus dari daftar kolom, jadi kartu ini
             diganti TOTAL PO OUTLOOK yang masih ada dan sama informatifnya. */}
         <Stat
           label="Total PO Outlook"
           value={fmtWhole(national.total_po_outlook)}
-          sub="Nasional, minggu berjalan"
         />
         <Stat
           label="Perubahan perlu ditinjau"
           value={String(openRevisions ?? 0)}
-          sub="Angka berubah setelah submit"
           tone={openRevisions && openRevisions > 0 ? 'warn' : 'normal'}
           href="#perubahan"
         />
@@ -161,7 +158,7 @@ export default async function SummaryPage({
         <div className="border-b border-slate-200 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-900">Status Pengisian per Cabang</h3>
           <p className="text-xs text-slate-500">
-            Kotak berwarna = minggu tersebut sudah di-submit dan angkanya terkunci.
+            🟩 Hijau = sudah submit dan angka terkunci &nbsp;·&nbsp; 🟨 Kuning = belum diisi
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -196,16 +193,12 @@ export default async function SummaryPage({
                       <td key={w} className="px-3 py-2.5 text-center">
                         <span
                           className={`inline-block h-4 w-8 rounded ${
-                            sub?.weeks.includes(w)
-                              ? 'bg-emerald-500'
-                              : w === period.current_week
-                                ? 'bg-amber-200'
-                                : 'bg-slate-100'
+                            sub?.weeks.includes(w) ? 'bg-emerald-500' : 'bg-amber-300'
                           }`}
                           title={
                             sub?.weeks.includes(w)
-                              ? `Minggu ${w} sudah submit`
-                              : `Minggu ${w} belum submit`
+                              ? `Minggu ${w} sudah submit dan angka terkunci`
+                              : `Minggu ${w} belum diisi`
                           }
                         />
                       </td>
