@@ -77,9 +77,7 @@ export default async function InputPage({
 
   const requested = Number(searchParams.week);
   const reportingWeek =
-    Number.isInteger(requested) && requested >= 1 && requested <= maxWeek
-      ? requested
-      : Math.min(period.current_week, maxWeek);
+    Number.isInteger(requested) && requested >= 1 && requested <= maxWeek ? requested : 1;
 
   const supabase = createClient();
   const [salesmen, entries, lastSubmittedWeek, { data: subs }, branchEntry, branchSnapshot] =
@@ -121,14 +119,8 @@ export default async function InputPage({
             Input Report — {branch.name}
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Melapor untuk{' '}
-            <strong>
-              Minggu {reportingWeek} {periodLabel(period.year, period.month)}
-            </strong>{' '}
+            <strong>Minggu {reportingWeek}</strong> · {periodLabel(period.year, period.month)}{' '}
             ({describeWeek(period.year, period.month, reportingWeek, monthName(period.month))})
-            {lastSubmittedWeek
-              ? ` · terakhir submit Minggu ${lastSubmittedWeek}`
-              : ' · belum pernah submit bulan ini'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
