@@ -332,20 +332,10 @@ export default function UploadPanel({
         <h3 className="text-sm font-semibold text-slate-900">
           Unggah file MOS cabang Anda — apa adanya
         </h3>
-        <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500">
-          Pakai <strong>file Excel yang selama ini Anda isi</strong>. Tidak perlu menyalin
-          datanya ke template baru: sistem membaca sheet{' '}
-          <strong>{monthName(month)} {year}</strong>, mencari baris cabang{' '}
-          <strong>{branchName} ({branchCode})</strong>, lalu membaca baris salesman di
-          bawahnya berdasarkan huruf kolom aslinya (O, S, AE, AI, dan seterusnya).
-          Angka PLAN SALES MASTER, OL MIN PRTM, dan ACTUAL SALES di baris cabang ikut terbaca.
-        </p>
-        <p className="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">
-          File diperiksa dulu di layar ini — <strong>tidak ada data yang tersimpan</strong>{' '}
-          sebelum Anda menekan tombol konfirmasi. Kolom hasil perhitungan (TOTAL OL PRTM,
-          TOTAL PO, dan seterusnya) diabaikan karena dihitung ulang oleh sistem, jadi rumus
-          rusak atau <code className="rounded bg-slate-100 px-1">#REF!</code> di file lama
-          tidak ikut masuk.
+        <p className="mt-1 text-xs text-slate-500">
+          Pakai file Excel yang selama ini Anda isi, tidak perlu disalin ke template baru. Sistem
+          membaca sheet <strong>{monthName(month)} {year}</strong>. File diperiksa dulu di layar
+          ini — tidak ada yang tersimpan sebelum Anda menekan tombol konfirmasi.
         </p>
         <div className="mt-3">
           <a
@@ -479,10 +469,6 @@ export default function UploadPanel({
                 <span>
                   <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-100 align-middle" />
                   berubah &amp; perlu alasan
-                </span>
-                <span className="text-slate-400">
-                  putih = input dari file · abu-abu = dihitung otomatis · dash (—) = tidak berlaku
-                  untuk baris ini
                 </span>
               </p>
             </>
