@@ -1,12 +1,14 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { periodLabel } from '@/lib/format';
+import { monthName } from '@/lib/format';
 import type { Period } from '@/lib/types';
 
-/* Daftar periode kini berisi 24 bulan (Jan 2026 - Des 2027), jadi
- * dikelompokkan per tahun dengan <optgroup> supaya tidak jadi daftar
- * panjang yang sulit dipindai. */
+/* Filter Bulan & Tahun dipisah jadi dua <select>: satu daftar tahun (2026,
+ * 2027, …), satu daftar bulan (Januari..Desember) untuk tahun yang sedang
+ * dipilih. Keduanya sama-sama menunjuk ke satu `period` (kombinasi
+ * tahun+bulan), jadi memilih salah satu tetap harus mencari `period.id`
+ * yang cocok sebelum pindah halaman. */
 
 export default function PeriodPicker({
   periods,
@@ -19,34 +21,58 @@ export default function PeriodPicker({
   const pathname = usePathname();
   const params = useSearchParams();
 
-  // periods sudah terurut tahun & bulan menurun dari server.
-  const years: Array<{ year: number; items: Period[] }> = [];
-  for (const p of periods) {
-    const last = years[years.length - 1];
-    if (last && last.year === p.year) last.items.push(p);
-    else years.push({ year: p.year, items: [p] });
-  }
+  const currentPeriod = periods.find((p) => p.id === current);
+
+  const years = Array.from(new Set(periods.map((p) => p.year))).sort((a, b) => b - a);
+  const monthsInYear = periods
+    .filter((p) => p.year === currentPeriod?.year)
+    .sort((a, b) => a.month - b.month);
+
+  const goTo = (id: string) => {
+    const next = new URLSearchParams(params.toString());
+    next.set('period', id);
+    router.push(`${pathname}?${next.toString()}`);
+  };
+
+  const handleMonthChange = (month: number) => {
+    const target = periods.find((p) => p.year === currentPeriod?.year && p.month === month);
+    if (target) goTo(target.id);
+  };
+
+  const handleYearChange = (year: number) => {
+    // Pindah tahun tapi tetap coba pertahankan bulan yang sama; kalau bulan
+    // itu belum ada di tahun tujuan, pakai bulan pertama yang tersedia.
+    const sameMonth = periods.find((p) => p.year === year && p.month === currentPeriod?.month);
+    const fallback = periods.filter((p) => p.year === year).sort((a, b) => a.month - b.month)[0];
+    const target = sameMonth ?? fallback;
+    if (target) goTo(target.id);
+  };
 
   return (
-    <select
-      value={current}
-      onChange={(e) => {
-        const next = new URLSearchParams(params.toString());
-        next.set('period', e.target.value);
-        router.push(`${pathname}?${next.toString()}`);
-      }}
-      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-brand-500"
-    >
-      {years.map((g) => (
-        <optgroup key={g.year} label={String(g.year)}>
-          {g.items.map((p) => (
-            <option key={p.id} value={p.id}>
-              {periodLabel(p.year, p.month)}
-              {p.is_open ? '' : ' (ditutup)'}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+    <div className="flex items-center gap-1.5">
+      <select
+        value={currentPeriod?.month ?? ''}
+        onChange={(e) => handleMonthChange(Number(e.target.value))}
+        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-brand-500"
+      >
+        {monthsInYear.map((p) => (
+          <option key={p.id} value={p.month}>
+            {monthName(p.month)}
+            {p.is_open ? '' : ' (ditutup)'}
+          </option>
+        ))}
+      </select>
+      <select
+        value={currentPeriod?.year ?? ''}
+        onChange={(e) => handleYearChange(Number(e.target.value))}
+        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-brand-500"
+      >
+        {years.map((y) => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
