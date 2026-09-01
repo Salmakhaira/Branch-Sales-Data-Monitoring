@@ -71,6 +71,11 @@ body {
   background: #fffbeb;
 }
 
+.cell-required {
+  background: #fef3c7;
+  box-shadow: inset 0 0 0 1px #f59e0b;
+}
+
 .cell-changed {
   background: #fff1f2;
   box-shadow: inset 0 0 0 1px #fda4af;
