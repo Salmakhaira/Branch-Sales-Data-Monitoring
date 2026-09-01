@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import InputGrid from './InputGrid';
 import UploadPanel from './UploadPanel';
-import BranchLevelPanel from './BranchLevelPanel';
 import type { ValueMap } from '@/lib/metrics';
 
 type Mode = 'grid' | 'upload';
@@ -39,16 +38,6 @@ export default function ReportWorkspace(props: Props) {
 
   return (
     <div className="space-y-4">
-      <BranchLevelPanel
-        periodId={props.periodId}
-        branchId={props.branchId}
-        branchName={props.branchName}
-        readOnly={props.readOnly}
-        lastSubmittedWeek={props.lastSubmittedWeek}
-        initialValues={props.branchInitialValues}
-        snapshotValues={props.branchSnapshotValues}
-      />
-
       <div
         role="tablist"
         aria-label="Cara mengisi report"
@@ -80,6 +69,8 @@ export default function ReportWorkspace(props: Props) {
           salesmen={props.salesmen}
           initialValues={props.initialValues}
           snapshotValues={props.snapshotValues}
+          branchInitialValues={props.branchInitialValues}
+          branchSnapshotValues={props.branchSnapshotValues}
         />
       ) : (
         <UploadPanel
