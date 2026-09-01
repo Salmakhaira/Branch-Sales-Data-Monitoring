@@ -45,12 +45,18 @@ export function fmtPercent(v: number | null | undefined): string {
 
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '';
+  // Tanpa `timeZone`, toLocaleString() memakai zona waktu SERVER (di
+  // Vercel = UTC), bukan zona waktu pembaca — jamnya jadi mundur 7 jam
+  // dari WIB. Dikunci ke Asia/Jakarta supaya selalu sama dengan jam
+  // dinding cabang, konsisten dengan REPORTING_TIMEZONE di period.ts yang
+  // dipakai untuk aturan minggu.
   return new Date(iso).toLocaleString('id-ID', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'Asia/Jakarta',
   });
 }
 
