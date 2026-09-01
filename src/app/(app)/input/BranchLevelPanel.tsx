@@ -116,10 +116,7 @@ export default function BranchLevelPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Data Tingkat Cabang</h3>
-          <p className="mt-0.5 max-w-xl text-[11px] leading-relaxed text-slate-500">
-            Tiga angka ini diisi <strong>sekali untuk seluruh cabang {branchName}</strong> — persis
-            seperti baris TOTAL di Excel asli, bukan per salesman.
-          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500">Diisi sekali untuk seluruh cabang, bukan per salesman.</p>
         </div>
         <button
           onClick={() => save()}
