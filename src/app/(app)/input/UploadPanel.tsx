@@ -280,10 +280,6 @@ export default function UploadPanel({
     return rows;
   }, [parsed, parsedBranch, diffs, branchName, reportingWeek]);
 
-  const errors = issues.filter((i) => i.level === 'error');
-  const warnings = issues.filter((i) => i.level === 'warning');
-  const needReason = diffs.filter((d) => d.requiresReason);
-
   /* --- Commit ------------------------------------------------------ */
   async function commit(reasons?: Record<string, ReasonInput>) {
     if (!parsed) return;
@@ -400,61 +396,10 @@ export default function UploadPanel({
                 />
               </div>
             </div>
-            {sourceInfo && (
-              <p className="mt-1 text-[11px] text-slate-500">
-                Dibaca dari sheet <strong>{sourceInfo.sheetName}</strong> ·{' '}
-                {sourceInfo.format === 'mos'
-                  ? 'format file MOS cabang'
-                  : 'format template sistem'}
-              </p>
-            )}
-            <div className="mt-2 flex flex-wrap gap-4 text-xs">
-              <Chip tone="neutral" label={`${parsed.length} baris salesman terbaca`} />
-              <Chip tone={diffs.length ? 'info' : 'neutral'} label={`${diffs.length} sel berubah`} />
-              <Chip
-                tone={needReason.length ? 'warn' : 'neutral'}
-                label={`${needReason.length} perlu alasan`}
-              />
-              <Chip tone={errors.length ? 'err' : 'neutral'} label={`${errors.length} error`} />
-              <Chip tone={warnings.length ? 'warn' : 'neutral'} label={`${warnings.length} peringatan`} />
-            </div>
           </div>
-
-          {(errors.length > 0 || warnings.length > 0) && (
-            <ul className="space-y-1 border-b border-slate-200 px-5 py-3 text-xs">
-              {errors.map((i, idx) => (
-                <li key={`e${idx}`} className="text-rose-700">
-                  ✕ {i.row ? `Baris ${i.row}: ` : ''}
-                  {i.message}
-                </li>
-              ))}
-              {warnings.map((i, idx) => (
-                <li key={`w${idx}`} className="text-amber-700">
-                  ⚠ {i.message}
-                </li>
-              ))}
-            </ul>
-          )}
 
           {view === 'table' ? (
             <>
-              {/* Daftar status singkat per salesman, sebelum tabel penuh —
-                  supaya sekilas ketahuan siapa yang datanya berubah, siapa
-                  yang perlu alasan, tanpa harus menyisir tabel dulu. */}
-              <ul className="max-h-40 space-y-0.5 overflow-auto border-b border-slate-100 px-5 py-3 text-xs">
-                {preview
-                  .filter((r) => r.kind !== 'total')
-                  .map((r) => (
-                    <li key={r.id} className={r.needReason > 0 ? 'text-amber-700' : 'text-slate-600'}>
-                      {r.needReason > 0 ? '⚠' : '✓'} {r.name}
-                      {' — '}
-                      {r.changed === 0
-                        ? 'tidak ada perubahan'
-                        : `${r.changed} sel berubah${r.needReason > 0 ? `, ${r.needReason} perlu alasan` : ''}`}
-                    </li>
-                  ))}
-              </ul>
-
               <ExcelPreviewTable rows={preview} reportingWeek={reportingWeek} />
 
               <p className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 px-5 py-2 text-[11px] text-slate-500">
@@ -526,12 +471,7 @@ export default function UploadPanel({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-3">
-            <p className="text-[11px] text-slate-400">
-              {errors.length > 0
-                ? 'Perbaiki error di file lalu unggah ulang, atau lanjutkan — baris bermasalah akan dilewati.'
-                : 'Semua baris terbaca dengan baik.'}
-            </p>
+          <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-3">
             <div className="flex gap-2">
               <button
                 onClick={reset}
@@ -747,14 +687,4 @@ function ViewButton({
       {label}
     </button>
   );
-}
-
-function Chip({ tone, label }: { tone: 'neutral' | 'info' | 'warn' | 'err'; label: string }) {
-  const cls = {
-    neutral: 'bg-slate-100 text-slate-600',
-    info: 'bg-sky-100 text-sky-700',
-    warn: 'bg-amber-100 text-amber-800',
-    err: 'bg-rose-100 text-rose-700',
-  }[tone];
-  return <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${cls}`}>{label}</span>;
 }
