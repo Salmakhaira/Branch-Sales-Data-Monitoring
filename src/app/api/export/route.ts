@@ -16,9 +16,14 @@ export const dynamic = 'force-dynamic';
 /* GET /api/export?period=<uuid>
  * Menghasilkan file rekap nasional bergaya seperti MOS Nasional.
  *
- * Dibangun di server supaya ExcelJS tidak ikut diunduh browser, dan
- * supaya data yang diambil tetap tunduk pada Row Level Security —
- * user cabang hanya akan mendapat baris cabangnya sendiri. */
+ * Dibangun di server supaya ExcelJS tidak ikut diunduh browser. Data ANGKA
+ * (report_entries dkk.) memang sudah tunduk pada RLS — user cabang hanya
+ * bisa mengambil baris cabangnya sendiri. Tapi tabel `areas`/`branches`/
+ * `salesmen` policy-nya "master read" (bisa dibaca bebas oleh siapa pun
+ * yang login, lihat schema.sql) — jadi TANPA filter di bawah ini, user
+ * cabang tetap bisa mengunduh file berisi nama/kode SELURUH cabang & area
+ * lain (dengan sel angka kosong). Filter ini menyamakan pembatasan export
+ * dengan halaman web /national sejak v2.14 (lihat national/page.tsx). */
 
 export async function GET(request: Request) {
   const profile = await getProfile();
@@ -32,13 +37,23 @@ export async function GET(request: Request) {
     return new Response('Periode tidak ditemukan.', { status: 404 });
   }
 
-  const [areas, branches, entries, allSalesmen, branchEntries] = await Promise.all([
+  const [allAreas, allBranches, entries, allSalesmen, branchEntries] = await Promise.all([
     listAreas(),
     listBranches(),
     listEntries(period.id),
     listSalesmen(),
     listBranchEntries(period.id),
   ]);
+
+  const isHO = profile.role === 'ho_pic' || profile.role === 'admin';
+  const branches = isHO ? allBranches : allBranches.filter((b) => b.id === profile.branch_id);
+  const areas = isHO ? allAreas : allAreas.filter((a) => a.id === branches[0]?.area_id);
+
+  if (!isHO && branches.length === 0) {
+    return new Response('Akun Anda belum ditautkan ke cabang mana pun. Hubungi Administrator.', {
+      status: 403,
+    });
+  }
 
   const ctx = { week: period.current_week };
 
