@@ -10,7 +10,7 @@ import {
   listPeriods,
 } from '@/lib/report';
 import { aggregateRows, computeRow, type ValueMap } from '@/lib/metrics';
-import { fmtDateTime, fmtNumber, fmtWhole, monthName, periodLabel } from '@/lib/format';
+import { fmtDateTime, fmtWhole, monthName, periodLabel } from '@/lib/format';
 import { describeWeek } from '@/lib/period';
 import PeriodPicker from '@/components/PeriodPicker';
 import RevisionMonitor from '@/components/RevisionMonitor';
@@ -138,7 +138,7 @@ export default async function SummaryPage({
         />
         <Stat
           label="Total OL Revenue"
-          value={fmtNumber(national.total_ol_revenue)}
+          value={fmtWhole(national.total_ol_revenue)}
         />
         {/* RATIO OL/PO sudah dihapus dari daftar kolom, jadi kartu ini
             diganti TOTAL PO OUTLOOK yang masih ada dan sama informatifnya. */}
@@ -204,10 +204,10 @@ export default async function SummaryPage({
                       </td>
                     ))}
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                      {fmtNumber(agg.total_ol_revenue)}
+                      {fmtWhole(agg.total_ol_revenue)}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                      {fmtNumber(agg.actual_sales)}
+                      {fmtWhole(agg.actual_sales)}
                     </td>
                     <td className="px-5 py-2.5 text-right text-xs text-slate-500">
                       {fmtDateTime(lastActivityByBranch.get(b.id)) || '—'}
@@ -222,10 +222,10 @@ export default async function SummaryPage({
                   GRAND TOTAL NASIONAL
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">
-                  {fmtNumber(national.total_ol_revenue)}
+                  {fmtWhole(national.total_ol_revenue)}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">
-                  {fmtNumber(national.actual_sales)}
+                  {fmtWhole(national.actual_sales)}
                 </td>
                 <td />
               </tr>
