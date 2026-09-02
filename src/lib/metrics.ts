@@ -334,8 +334,13 @@ const derivedMetrics: Metric[] = [
     kind: 'derived',
     scope: 'monthly',
     excel: 'BN',
-    inGrid: true,
-    inNational: true,
+    // v2.9: dihapus dari semua tampilan (grid input, preview upload, rekap
+    // nasional, export Excel rekap) atas permintaan user — kolomnya sendiri
+    // tetap didefinisikan (bukan dihapus total) karena excel: 'BN' masih
+    // dipakai buildBranchTemplateWorkbook() untuk menjaga huruf kolom
+    // template input tidak bergeser (lihat xlsx-styled.ts baris ~323).
+    inGrid: false,
+    inNational: false,
     format: 'percent',
     level: 'branch',
     hint: 'Butuh ACTUAL SALES & PLAN SALES (angka tingkat cabang), jadi hanya berarti di baris TOTAL cabang.',
