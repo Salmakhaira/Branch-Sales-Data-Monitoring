@@ -15,7 +15,7 @@ import {
   type ValueMap,
   type Metric,
 } from '@/lib/metrics';
-import { fmtNumber, fmtPercent } from '@/lib/format';
+import { fmtWhole, fmtPercent } from '@/lib/format';
 import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import ReasonModal, { type ReasonInput } from '@/components/ReasonModal';
 import type { SaveConflict } from '@/lib/types';
@@ -496,10 +496,10 @@ export default function UploadPanel({
                         <td className="px-5 py-1.5 text-slate-700">{d.salesmanName}</td>
                         <td className="px-3 py-1.5 text-slate-600">{d.fieldLabel}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
-                          {fmtNumber(d.oldValue)}
+                          {fmtWhole(d.oldValue)}
                         </td>
                         <td className="px-3 py-1.5 text-right font-medium tabular-nums text-slate-800">
-                          {fmtNumber(d.newValue)}
+                          {fmtWhole(d.newValue)}
                         </td>
                         <td
                           className={`px-3 py-1.5 text-right tabular-nums ${
@@ -507,7 +507,7 @@ export default function UploadPanel({
                           }`}
                         >
                           {delta >= 0 ? '+' : ''}
-                          {fmtNumber(delta)}
+                          {fmtWhole(delta)}
                         </td>
                         <td className="px-5 py-1.5">
                           {d.requiresReason ? (
@@ -679,7 +679,7 @@ function ExcelPreviewTable({
                 }
 
                 const fmt = (v: number | null | undefined) =>
-                  c.format === 'percent' ? fmtPercent(v) : fmtNumber(v);
+                  c.format === 'percent' ? fmtPercent(v) : fmtWhole(v);
                 const d = c.kind === 'input' ? r.cells[c.key] : undefined;
                 const value = r.computed[c.key] as number | null | undefined;
 
@@ -688,7 +688,7 @@ function ExcelPreviewTable({
                   return (
                     <td
                       key={c.key}
-                      title={`Sebelum ${fmtNumber(d.oldValue)} → sesudah ${fmtNumber(d.newValue)}`}
+                      title={`Sebelum ${fmtWhole(d.oldValue)} → sesudah ${fmtWhole(d.newValue)}`}
                       className={`border-b border-slate-100 px-2 py-1.5 text-right tabular-nums ${
                         d.requiresReason ? 'bg-amber-50' : 'bg-sky-50/60'
                       }`}
@@ -698,7 +698,7 @@ function ExcelPreviewTable({
                         className={`block text-[10px] ${delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}
                       >
                         {delta >= 0 ? '+' : ''}
-                        {fmtNumber(delta)}
+                        {fmtWhole(delta)}
                       </span>
                     </td>
                   );
