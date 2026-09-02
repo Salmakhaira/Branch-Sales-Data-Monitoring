@@ -129,11 +129,7 @@ function columnIndexByKey(keys: string[]): Map<number, string> {
  * yang perlu.
  */
 function readWorkbook(data: ArrayBuffer, ctx: ParseContext) {
-  const wanted = [
-    'INPUT',
-    ...monthNameCandidates(ctx.month).map((name) => `${name} ${ctx.year}`),
-    'MOS',
-  ];
+  const wanted = monthNameCandidates(ctx.month).map((name) => `${name} ${ctx.year}`);
 
   const opts: XLSX.ParsingOptions = {
     type: 'array',
@@ -153,7 +149,16 @@ function readWorkbook(data: ArrayBuffer, ctx: ParseContext) {
   return wb;
 }
 
-/** Pilih sheet yang paling masuk akal untuk periode yang sedang dilaporkan. */
+/** Pilih sheet yang paling masuk akal untuk periode yang sedang dilaporkan.
+ *
+ *  SENGAJA TIDAK ADA fallback ke sheet generik ('INPUT', 'MOS', atau sheet
+ *  pertama di workbook) kalau sheet bulan yang diminta tidak ketemu. Sheet
+ *  seperti 'MOS' di beberapa file cabang ternyata memuat data ARSIP/LAMA
+ *  yang tidak ada hubungannya dengan bulan yang sedang dilaporkan — kalau
+ *  dipakai sebagai pengganti diam-diam, angka basi itu bisa kelihatan
+ *  seperti data valid di layar preview lalu ke-submit tanpa disadari.
+ *  Lebih aman menolak dengan error yang jelas (lihat pemanggil fungsi ini)
+ *  dan meminta cabang memastikan sheet bulan itu memang ada di file. */
 function pickSheet(wb: XLSX.WorkBook, ctx: ParseContext): string | null {
   const names = wb.SheetNames.filter((n) => wb.Sheets[n]);
   if (names.length === 0) return null;
@@ -171,13 +176,7 @@ function pickSheet(wb: XLSX.WorkBook, ctx: ParseContext): string | null {
   );
   if (contains) return contains;
 
-  const input = names.find((n) => normalize(n) === 'INPUT');
-  if (input) return input;
-
-  const mos = names.find((n) => normalize(n) === 'MOS');
-  if (mos) return mos;
-
-  return names[0];
+  return null;
 }
 
 type Grid = (string | number | null)[][];
@@ -226,7 +225,7 @@ export function parseBranchTemplate(data: ArrayBuffer, ctx: ParseContext): Parse
       issues: [
         {
           level: 'error',
-          message: `Tidak ditemukan sheet untuk ${monthName(ctx.month)} ${ctx.year} di dalam file. Pastikan file memuat sheet bulan tersebut.`,
+          message: `Sheet "${monthName(ctx.month)} ${ctx.year}" tidak ditemukan di dalam file. Tambahkan dulu sheet bulan itu di file Excel Anda (salin dari bulan sebelumnya lalu kosongkan angkanya), baru unggah ulang — sistem sengaja tidak menebak dari sheet lain supaya tidak ada angka bulan lain yang salah termuat.`,
         },
       ],
       unknownColumns: [],
