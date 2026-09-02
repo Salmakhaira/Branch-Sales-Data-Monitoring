@@ -6,7 +6,6 @@ import {
   orderedMetrics,
   aggregateRows,
   BRANCH_INPUT_KEYS,
-  METRIC_BY_KEY,
   SALESMAN_INPUT_KEYS,
   computeRow,
   isFieldLocked,
@@ -33,8 +32,9 @@ interface Props {
   initialValues: Values;
   snapshotValues: Values;
   /** PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES — satu set nilai per
-   *  cabang, ditampilkan sebagai tabel ringkas 3 baris (label + nilai) di
-   *  atas grid salesman, bukan panel kartu terpisah lagi — tapi tetap
+   *  cabang. Sejak v2.11 ditampilkan sebagai KOLOM di grid salesman yang
+   *  sama (baris cabang tersendiri di baris pertama, persis posisi baris
+   *  cabang di file Excel asli) — bukan tabel/panel terpisah lagi. Tetap
    *  disimpan bersamaan lewat satu tombol Simpan yang sama. */
   branchInitialValues: ValueMap;
   branchSnapshotValues: ValueMap;
@@ -63,13 +63,14 @@ export default function InputGrid({
 
   /* Seluruh kolom W1–W4 selalu tampil, supaya cabang bebas mengisi ke
    * depan maupun memperbaiki ke belakang. Yang terkunci ditandai warna.
-   * PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES (dan turunannya BALANCE
-   * PRTM/RATIO ACTUAL) tidak ikut di sini — itu data TINGKAT CABANG,
-   * ditampilkan di tabel ringkas terpisah di atas grid ini. */
-  const columns = useMemo(
-    () => orderedMetrics((m) => m.inGrid && (m.level ?? 'salesman') === 'salesman'),
-    [],
-  );
+   * Sejak v2.11, kolom tingkat cabang (PLAN SALES MASTER, OL MIN PRTM,
+   * ACTUAL SALES, dan turunannya BALANCE PRTM) IKUT di sini — tidak lagi
+   * difilter berdasar `level`, persis seperti PREVIEW_COLUMNS di
+   * UploadPanel.tsx — supaya posisinya otomatis benar di antara kolom
+   * salesman lain (mengikuti huruf kolom Excel), bukan digabung sebagai
+   * tabel ringkas terpisah lagi. Baris cabang & baris salesman lalu
+   * membedakan kolom mana yang berlaku lewat `columnAppliesTo()`. */
+  const columns = useMemo(() => orderedMetrics((m) => m.inGrid), []);
 
   /* Header BERTINGKAT TIGA, sama seperti sheet MOS di file Excel cabang:
    *   baris 1 = grup besar   (OUTLOOK PRTM / OUTLOOK REVENUE TM)
@@ -129,9 +130,9 @@ export default function InputGrid({
     return out;
   }, [values, salesmen, reportingWeek]);
 
-  /* BALANCE PRTM & RATIO ACTUAL/PLAN — turunan dari branchValues (bukan
-   * dari salesman mana pun), ditampilkan sebagai info kecil di bawah
-   * tabel ringkas cabang. */
+  /* BALANCE PRTM — turunan dari branchValues (bukan dari salesman mana
+   * pun) — dipakai untuk mengisi kolom turunan di baris cabang pada grid
+   * (lihat `columnAppliesTo()` di render). */
   const branchComputed = useMemo(
     () => computeRow(branchValues, { week: reportingWeek }),
     [branchValues, reportingWeek],
@@ -226,8 +227,8 @@ export default function InputGrid({
     if (res.ok) router.refresh();
   }
 
-  /** Satu sel input, dipakai baris cabang (tabel ringkas) maupun baris
-   *  salesman (grid) — perilaku terkunci/berubah/wajib-alasan identik.
+  /** Satu sel input, dipakai baris cabang maupun baris salesman di grid
+   *  yang sama — perilaku terkunci/berubah/wajib-alasan identik.
    *
    *  `requiredEmpty` = true bila kolom ini wajib diisi untuk konteks
    *  saat ini (3 field cabang: selalu; kolom salesman: hanya kolom
@@ -345,41 +346,10 @@ export default function InputGrid({
         </p>
       )}
 
-      {/* Tabel ringkas DATA TINGKAT CABANG — 3 baris (label + nilai),
-          bukan bagian dari grid salesman yang lebar, karena tiga angka ini
-          cuma diisi SEKALI untuk seluruh cabang, bebas kapan saja dalam
-          bulan berjalan. Tetap disimpan lewat tombol "Simpan" yang sama
-          di toolbar atas (satu kali klik, satu jejak audit gabungan). */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-semibold text-slate-900">Data Tingkat Cabang</h3>
-        <p className="mt-0.5 text-[11px] text-slate-500">
-          Diisi sekali per bulan untuk seluruh cabang, bebas kapan saja — bukan per salesman.
-          🟨 Kuning = belum diisi.
-        </p>
-        <table className="mt-3 w-full max-w-xs text-xs">
-          <tbody>
-            {BRANCH_INPUT_KEYS.map((key) => {
-              const c = METRIC_BY_KEY[key];
-              return (
-                <tr key={key} className="border-b border-slate-100 last:border-0">
-                  <td className="py-1.5 pr-3 font-medium text-slate-600">{c.label}</td>
-                  {renderInputCell('branch', c, branchValues[key], true)}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
-          <span>
-            BALANCE PRTM (OL - PLAN PRTM):{' '}
-            <strong className="tabular-nums text-slate-900">
-              {fmtNumber(branchComputed.balance_prtm)}
-            </strong>
-          </span>
-        </div>
-      </div>
-
-      {/* Grid salesman */}
+      {/* Grid salesman — sejak v2.11 baris pertama adalah baris CABANG
+          (PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES/BALANCE PRTM), persis
+          posisi baris cabang di file Excel asli, bukan tabel terpisah lagi
+          di atasnya. */}
       <div className="scroll-x rounded-xl border border-slate-200 bg-white">
         <table className="grid-table w-full text-xs">
           <thead>
@@ -437,10 +407,44 @@ export default function InputGrid({
             </tr>
           </thead>
           <tbody>
+            {/* Baris CABANG — persis posisi baris cabang di file Excel asli
+                (baris 7): kolom level cabang (PLAN SALES MASTER dkk) yang
+                editable/dihitung, kolom level salesman ditampilkan dash
+                "—" karena memang tidak berlaku di baris ini. */}
+            <tr className="bg-sky-50/50">
+              <td className="sticky-col bg-sky-50 px-3 py-1.5 font-medium text-sky-900">
+                {branchName} · data cabang
+              </td>
+              {columns.map((c) => {
+                if (!columnAppliesTo(c, 'branch')) {
+                  return (
+                    <td key={c.key} className="cell-derived text-right text-slate-300">
+                      —
+                    </td>
+                  );
+                }
+                if (c.kind === 'derived') {
+                  const v = branchComputed[c.key];
+                  return (
+                    <td key={c.key} className="cell-derived">
+                      {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                    </td>
+                  );
+                }
+                return renderInputCell('branch', c, branchValues[c.key], true);
+              })}
+            </tr>
             {salesmen.map((s) => (
               <tr key={s.id} className="hover:bg-slate-50/60">
                 <td className="sticky-col px-3 py-1.5 font-medium text-slate-800">{s.name}</td>
                 {columns.map((c) => {
+                  if (!columnAppliesTo(c, 'salesman')) {
+                    return (
+                      <td key={c.key} className="cell-derived text-right text-slate-300">
+                        —
+                      </td>
+                    );
+                  }
                   if (c.kind === 'derived') {
                     const v = computedRows[s.id]?.[c.key];
                     return (
@@ -487,6 +491,17 @@ export default function InputGrid({
       )}
     </div>
   );
+}
+
+/** Kolom ini berlaku (punya nilai) di baris bertipe `kind`? Sama seperti
+ *  `columnAppliesTo()` di UploadPanel.tsx (dua tempat ini sengaja dijaga
+ *  sama persis — beda file karena beda tipe baris: `PreviewRow['kind']`
+ *  punya varian 'total' juga, di sini cuma 'branch'/'salesman'): kolom
+ *  level cabang (PLAN SALES MASTER dkk) cuma berlaku di baris cabang,
+ *  kolom level salesman cuma berlaku di baris salesman — sisanya dash. */
+function columnAppliesTo(col: Metric, kind: 'branch' | 'salesman'): boolean {
+  const isBranchCol = col.level === 'branch';
+  return kind === 'branch' ? isBranchCol : !isBranchCol;
 }
 
 function LegendSwatch({ className, label }: { className: string; label: string }) {
