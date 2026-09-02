@@ -376,12 +376,6 @@ export default function InputGrid({
               {fmtNumber(branchComputed.balance_prtm)}
             </strong>
           </span>
-          <span>
-            RATIO ACTUAL / PLAN:{' '}
-            <strong className="tabular-nums text-slate-900">
-              {fmtPercent(branchComputed.ratio_actual)}
-            </strong>
-          </span>
         </div>
       </div>
 
