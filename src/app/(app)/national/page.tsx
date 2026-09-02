@@ -10,7 +10,7 @@ import {
   listSalesmen,
 } from '@/lib/report';
 import { aggregateRows, computeRow, orderedMetrics, type ValueMap } from '@/lib/metrics';
-import { fmtNumber, fmtPercent, periodLabel } from '@/lib/format';
+import { fmtWhole, fmtPercent, periodLabel } from '@/lib/format';
 import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import PeriodPicker from '@/components/PeriodPicker';
 import ExportButton from '@/components/ExportButton';
@@ -228,7 +228,7 @@ export default async function NationalPage({
                       className="border-b border-slate-200 px-2 py-2 text-right tabular-nums text-slate-900"
                       style={{ backgroundColor: BRANCH_VALUE_BG }}
                     >
-                      {c.format === 'percent' ? fmtPercent(bb.total[c.key]) : fmtNumber(bb.total[c.key])}
+                      {c.format === 'percent' ? fmtPercent(bb.total[c.key]) : fmtWhole(bb.total[c.key])}
                     </td>
                   ))}
                 </tr>
@@ -260,7 +260,7 @@ export default async function NationalPage({
                           >
                             {c.format === 'percent'
                               ? fmtPercent(r.values[c.key])
-                              : fmtNumber(r.values[c.key])}
+                              : fmtWhole(r.values[c.key])}
                           </td>
                         );
                       })}
@@ -289,7 +289,7 @@ export default async function NationalPage({
                     key={c.key}
                     className="border-b border-slate-200 px-2 py-2 text-right tabular-nums font-medium text-slate-900"
                   >
-                    {c.format === 'percent' ? fmtPercent(a.values[c.key]) : fmtNumber(a.values[c.key])}
+                    {c.format === 'percent' ? fmtPercent(a.values[c.key]) : fmtWhole(a.values[c.key])}
                   </td>
                 ))}
               </tr>
@@ -310,7 +310,7 @@ export default async function NationalPage({
                 >
                   {c.format === 'percent'
                     ? fmtPercent(grandTotal[c.key])
-                    : fmtNumber(grandTotal[c.key])}
+                    : fmtWhole(grandTotal[c.key])}
                 </td>
               ))}
             </tr>
