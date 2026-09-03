@@ -36,6 +36,37 @@ interface Props {
 export default function ReportWorkspace(props: Props) {
   const [mode, setMode] = useState<Mode>('grid');
 
+  /* Ditemukan saat menyisir alur (3 September 2026): InputGrid & UploadPanel
+   * menyimpan draf yang sedang diketik di STATE React lokal (`values`,
+   * `branchValues` di InputGrid; `parsed`, dst. di UploadPanel), diisi
+   * SEKALI dari `initialValues` saat komponennya mount. BranchPicker /
+   * MonthYearPicker / WeekPicker berpindah halaman lewat `router.push()`
+   * (navigasi sisi klien) — di Next.js App Router, ini membuat Server
+   * Component (`page.tsx`) mengambil data baru dan mengirim props baru ke
+   * bawah, TAPI Client Component yang sudah ter-mount (`InputGrid`/
+   * `UploadPanel`) TIDAK ikut di-mount ulang hanya karena propnya berubah —
+   * state lokalnya bertahan apa adanya kecuali diberi `key` yang berubah.
+   *
+   * Akibatnya, tanpa `key` di bawah ini: berpindah CABANG atau
+   * BULAN/TAHUN lewat pemilih di atas halaman akan meninggalkan angka
+   * cabang/bulan SEBELUMNYA tetap "menempel" di state `values`/
+   * `branchValues` — termasuk tiga field tingkat cabang (PLAN SALES
+   * MASTER dkk.) yang kuncinya `'branch'` selalu sama apa pun cabangnya.
+   * Ini bukan cuma tampilan basi: kalau setelah berpindah cabang user
+   * menekan Simpan tanpa sadar datanya belum ter-refresh, `branchValues`
+   * milik cabang LAMA bisa terkirim ke `branchId` yang BARU. `key` di
+   * bawah ini (gabungan `periodId:branchId`) memaksa React me-mount ULANG
+   * `InputGrid`/`UploadPanel` (state lokal dibuang, dimulai lagi dari
+   * `initialValues` yang baru) setiap kali periode atau cabang berganti.
+   *
+   * Berpindah MINGGU saja sengaja TIDAK ikut membuang `key` ini — kolom
+   * W1-W4 memang selalu tampil sekaligus di grid yang sama (lihat catatan
+   * "Aturan minggu & periode"), jadi `values`/`branchValues` untuk
+   * periode+cabang yang sama tetap valid dipakai lintas minggu; me-mount
+   * ulang di sana cuma akan membuang draf yang sedang diketik tanpa
+   * alasan. */
+  const workspaceKey = `${props.periodId}:${props.branchId}`;
+
   return (
     <div className="space-y-4">
       <div
@@ -59,6 +90,7 @@ export default function ReportWorkspace(props: Props) {
 
       {mode === 'grid' ? (
         <InputGrid
+          key={workspaceKey}
           periodId={props.periodId}
           branchId={props.branchId}
           branchName={props.branchName}
@@ -74,6 +106,7 @@ export default function ReportWorkspace(props: Props) {
         />
       ) : (
         <UploadPanel
+          key={workspaceKey}
           periodId={props.periodId}
           branchId={props.branchId}
           branchCode={props.branchCode}
