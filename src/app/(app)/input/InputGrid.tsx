@@ -61,6 +61,32 @@ export default function InputGrid({
   const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [conflicts, setConflicts] = useState<SaveConflict[] | null>(null);
 
+  /* Sejak permintaan user (2 September 2026): begitu "Simpan" berhasil,
+   * grid ini langsung tampil BERSIH/kosong lagi — bukan terus menampilkan
+   * angka yang baru saja tersimpan. Angka yang sudah tersimpan tetap bisa
+   * dilihat di Rekap Nasional; grid ini sengaja diperlakukan seperti
+   * "form" yang mengosong setelah dikirim, bukan lembar kerja yang selalu
+   * menampilkan isi database.
+   *
+   * PENTING soal keamanan data — jangan hapus `values`/`branchValues`
+   * itu sendiri untuk mewujudkan tampilan kosong ini. Kalau state itu
+   * sungguh-sungguh dikosongkan ({}), maka blur tanpa mengetik apa pun
+   * (klik lalu pindah fokus, tab-through, dst.) akan membuat `setCell`
+   * menyimpan `null` ke sel yang sebenarnya masih berisi data asli —
+   * dan `null` itu AKAN terkirim ke server sebagai permintaan mengosongkan
+   * angka yang sesungguhnya (lihat /api/entries — field yang benar-benar
+   * absen dari payload tidak disentuh, tapi field yang eksplisit `null`
+   * TETAP dianggap perubahan yang disengaja). Jadi `values`/`branchValues`
+   * di sini tetap menyimpan angka SEBENARNYA seperti sebelumnya (dipakai
+   * untuk dirtyCells/needsReasonCells/payload simpan) — yang berubah
+   * cuma TAMPILANNYA lewat `justSaved` di bawah, dan `renderInputCell()`
+   * sengaja dibuat mengabaikan blur yang tidak mengubah nilai tampilan,
+   * supaya "kosong di layar" tidak pernah diam-diam menghapus data asli.
+   * Begitu user benar-benar mengetik sesuatu, `justSaved` otomatis mati
+   * lagi supaya sisa grid kembali menampilkan angka aslinya sebagai
+   * konteks pengeditan. */
+  const [justSaved, setJustSaved] = useState(false);
+
   /* Seluruh kolom W1–W4 selalu tampil, supaya cabang bebas mengisi ke
    * depan maupun memperbaiki ke belakang. Yang terkunci ditandai warna.
    * Sejak v2.11, kolom tingkat cabang (PLAN SALES MASTER, OL MIN PRTM,
@@ -196,6 +222,11 @@ export default function InputGrid({
           : `Tersimpan. ${data.revisions} perubahan tercatat` +
             (data.withReason ? `, ${data.withReason} di antaranya disertai alasan.` : '.'),
     });
+    // Grid tampil bersih lagi setelah simpan berhasil — lihat penjelasan
+    // di deklarasi `justSaved` di atas. Hanya dipasang saat benar-benar
+    // ada perubahan tersimpan; kalau "Tidak ada perubahan" (changed===0)
+    // tidak perlu mengosongkan tampilan karena tidak ada yang berubah.
+    if (data.changed > 0) setJustSaved(true);
     router.refresh();
   }
 
@@ -248,6 +279,16 @@ export default function InputGrid({
     const empty = raw === null || raw === undefined;
     const highlightRequired = requiredEmpty && empty && !dirty && !needsReason;
 
+    /* Lihat komentar di deklarasi `justSaved` di atas: yang TAMPIL sengaja
+     * dikosongkan setelah simpan berhasil, tanpa menyentuh `raw`/state
+     * sebenarnya sama sekali. `<input>` di bawah ini uncontrolled
+     * (`defaultValue`), jadi sekadar berubahnya nilai `raw` antar-render
+     * TIDAK membuat teks di layar ikut berubah — makanya `key` diikutkan
+     * supaya React me-remount elemennya (bukan cuma re-render) setiap kali
+     * `justSaved` berubah, dan teks di layar benar-benar ikut ter-reset. */
+    const displayRaw = justSaved ? null : raw;
+    const displayText = displayRaw === null || displayRaw === undefined ? '' : String(displayRaw);
+
     return (
       <td
         key={c.key}
@@ -269,11 +310,26 @@ export default function InputGrid({
         }
       >
         <input
+          key={justSaved ? 'blank' : 'filled'}
           className="cell-input"
           inputMode="decimal"
           readOnly={readOnly}
-          defaultValue={raw === null || raw === undefined ? '' : String(raw)}
-          onBlur={(e) => setCell(rowId, c.key, e.target.value)}
+          defaultValue={displayText}
+          onBlur={(e) => {
+            /* Blur tanpa perubahan nyata (klik lalu pindah fokus,
+             * tab-through, dst.) tidak boleh menulis apa pun — ini penting
+             * terutama saat `justSaved`, karena tampilan sedang kosong
+             * padahal nilai sebenarnya masih ada di state (lihat komentar
+             * di atas). Tanpa penjagaan ini, blur "kosong" seperti itu bisa
+             * menyimpan `null` menimpa angka asli saat tombol Simpan
+             * berikutnya ditekan. */
+            if (e.target.value === displayText) return;
+            setCell(rowId, c.key, e.target.value);
+            /* Ada pengeditan sungguhan — grid "bangun" lagi dan kembali
+             * menampilkan angka aslinya di seluruh sel sebagai konteks,
+             * sesuai desain yang sudah dijelaskan ke user. */
+            if (justSaved) setJustSaved(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
@@ -336,6 +392,14 @@ export default function InputGrid({
           }`}
         >
           {message.text}
+        </p>
+      )}
+
+      {justSaved && (
+        <p className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2 text-xs text-slate-600">
+          Grid dikosongkan sementara setelah tersimpan. Angka yang baru disimpan sudah bisa dilihat
+          di <strong>Rekap Nasional</strong>; untuk melihat/mengedit lagi di sini, muat ulang
+          halaman ini.
         </p>
       )}
 
@@ -427,7 +491,9 @@ export default function InputGrid({
                   const v = branchComputed[c.key];
                   return (
                     <td key={c.key} className="cell-derived">
-                      {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                      {/* Ikut kosong sesaat setelah simpan, konsisten
+                          dengan sel input di sebelahnya — lihat `justSaved`. */}
+                      {justSaved ? '' : c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
                     </td>
                   );
                 }
@@ -449,7 +515,7 @@ export default function InputGrid({
                     const v = computedRows[s.id]?.[c.key];
                     return (
                       <td key={c.key} className="cell-derived">
-                        {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                        {justSaved ? '' : c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
                       </td>
                     );
                   }
@@ -470,9 +536,11 @@ export default function InputGrid({
               </td>
               {columns.map((c) => (
                 <td key={c.key} className="px-2 py-2 text-right tabular-nums text-slate-800">
-                  {c.format === 'percent'
-                    ? fmtPercent(branchTotal[c.key])
-                    : fmtNumber(branchTotal[c.key])}
+                  {justSaved
+                    ? ''
+                    : c.format === 'percent'
+                      ? fmtPercent(branchTotal[c.key])
+                      : fmtNumber(branchTotal[c.key])}
                 </td>
               ))}
             </tr>
