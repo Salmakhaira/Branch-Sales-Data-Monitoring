@@ -7,6 +7,7 @@ import {
   aggregateRows,
   BRANCH_INPUT_KEYS,
   SALESMAN_INPUT_KEYS,
+  columnAppliesToLevel,
   computeRow,
   isFieldLocked,
   nearlyEqual,
@@ -124,7 +125,16 @@ export default function InputGrid({
     return set;
   }, [values, initialValues, salesmen, branchValues, branchInitialValues]);
 
-  /** Sel yang perubahannya akan memicu permintaan alasan. */
+  /** Sel yang perubahannya akan memicu permintaan alasan.
+   *
+   *  Harus dibatasi ke sel yang benar-benar DIEDIT sesi ini (`dirtyCells`),
+   *  bukan sekadar sel yang nilainya berbeda dari snapshot terakhir. Tanpa
+   *  syarat itu, sel yang sudah diperbaiki-dan-disimpan-dengan-alasan pada
+   *  sesi sebelumnya akan terus ditandai "perlu alasan" di setiap kunjungan
+   *  berikutnya sampai minggu itu di-submit ulang — padahal tidak ada apa
+   *  pun yang perlu disimpan (mencerminkan cara /api/entries menghitung
+   *  perubahan: dibandingkan dengan nilai TERSIMPAN saat ini, bukan
+   *  snapshot). */
   const needsReasonCells = useMemo(() => {
     const set = new Set<string>();
     if (!lastSubmittedWeek) return set;
@@ -132,16 +142,20 @@ export default function InputGrid({
       const now = values[s.id] ?? {};
       const snap = snapshotValues[s.id] ?? {};
       for (const key of SALESMAN_INPUT_KEYS) {
+        const cellKey = `${s.id}:${key}`;
+        if (!dirtyCells.has(cellKey)) continue;
         if (!isFieldLocked(key, lastSubmittedWeek)) continue;
-        if (!nearlyEqual(now[key], snap[key])) set.add(`${s.id}:${key}`);
+        if (!nearlyEqual(now[key], snap[key])) set.add(cellKey);
       }
     }
     for (const key of BRANCH_INPUT_KEYS) {
+      const cellKey = `branch:${key}`;
+      if (!dirtyCells.has(cellKey)) continue;
       if (!isFieldLocked(key, lastSubmittedWeek)) continue;
-      if (!nearlyEqual(branchValues[key], branchSnapshotValues[key])) set.add(`branch:${key}`);
+      if (!nearlyEqual(branchValues[key], branchSnapshotValues[key])) set.add(cellKey);
     }
     return set;
-  }, [values, snapshotValues, salesmen, lastSubmittedWeek, branchValues, branchSnapshotValues]);
+  }, [dirtyCells, values, snapshotValues, salesmen, lastSubmittedWeek, branchValues, branchSnapshotValues]);
 
   /* Kolom turunan dihitung memakai minggu yang SEDANG DILAPORKAN,
    * bukan minggu kalender — sehingga TOTAL OL PRTM dsb. mengambil kolom
@@ -480,7 +494,7 @@ export default function InputGrid({
                 {branchName} · data cabang
               </td>
               {columns.map((c) => {
-                if (!columnAppliesTo(c, 'branch')) {
+                if (!columnAppliesToLevel(c, 'branch')) {
                   return (
                     <td key={c.key} className="cell-derived text-right text-slate-300">
                       —
@@ -504,7 +518,7 @@ export default function InputGrid({
               <tr key={s.id} className="hover:bg-slate-50/60">
                 <td className="sticky-col px-3 py-1.5 font-medium text-slate-800">{s.name}</td>
                 {columns.map((c) => {
-                  if (!columnAppliesTo(c, 'salesman')) {
+                  if (!columnAppliesToLevel(c, 'salesman')) {
                     return (
                       <td key={c.key} className="cell-derived text-right text-slate-300">
                         —
@@ -559,17 +573,6 @@ export default function InputGrid({
       )}
     </div>
   );
-}
-
-/** Kolom ini berlaku (punya nilai) di baris bertipe `kind`? Sama seperti
- *  `columnAppliesTo()` di UploadPanel.tsx (dua tempat ini sengaja dijaga
- *  sama persis — beda file karena beda tipe baris: `PreviewRow['kind']`
- *  punya varian 'total' juga, di sini cuma 'branch'/'salesman'): kolom
- *  level cabang (PLAN SALES MASTER dkk) cuma berlaku di baris cabang,
- *  kolom level salesman cuma berlaku di baris salesman — sisanya dash. */
-function columnAppliesTo(col: Metric, kind: 'branch' | 'salesman'): boolean {
-  const isBranchCol = col.level === 'branch';
-  return kind === 'branch' ? isBranchCol : !isBranchCol;
 }
 
 function LegendSwatch({ className, label }: { className: string; label: string }) {

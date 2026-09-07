@@ -22,8 +22,12 @@ export default function UserManager({
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Record<string, { role: UserRole; branchId: string | null }>>(
-    Object.fromEntries(profiles.map((p) => [p.id, { role: p.role, branchId: p.branch_id }])),
+  const [draft, setDraft] = useState<
+    Record<string, { role: UserRole; branchId: string | null; isActive: boolean }>
+  >(
+    Object.fromEntries(
+      profiles.map((p) => [p.id, { role: p.role, branchId: p.branch_id, isActive: p.is_active }]),
+    ),
   );
 
   async function save(userId: string) {
@@ -33,7 +37,7 @@ export default function UserManager({
     const res = await fetch('/api/admin/user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, role: d.role, branchId: d.branchId }),
+      body: JSON.stringify({ userId, role: d.role, branchId: d.branchId, isActive: d.isActive }),
     });
     const data = await res.json();
     setBusyId(null);
@@ -60,13 +64,15 @@ export default function UserManager({
               <th className="px-5 py-2 font-medium">Nama / Email</th>
               <th className="px-3 py-2 font-medium">Role</th>
               <th className="px-3 py-2 font-medium">Cabang</th>
+              <th className="px-3 py-2 font-medium">Aktif</th>
               <th className="px-5 py-2 font-medium" />
             </tr>
           </thead>
           <tbody>
             {profiles.map((p) => {
               const d = draft[p.id];
-              const changed = d.role !== p.role || d.branchId !== p.branch_id;
+              const changed =
+                d.role !== p.role || d.branchId !== p.branch_id || d.isActive !== p.is_active;
               return (
                 <tr key={p.id} className="border-b border-slate-100 last:border-0">
                   <td className="px-5 py-2.5">
@@ -118,6 +124,26 @@ export default function UserManager({
                       ))}
                     </select>
                   </td>
+                  <td className="px-3 py-2.5">
+                    <label className="inline-flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={d.isActive}
+                        disabled={p.id === meId}
+                        title={p.id === meId ? 'Anda tidak dapat menonaktifkan akun sendiri.' : undefined}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            [p.id]: { ...prev[p.id], isActive: e.target.checked },
+                          }))
+                        }
+                        className="h-3.5 w-3.5 rounded border-slate-300 disabled:opacity-40"
+                      />
+                      <span className={d.isActive ? 'text-slate-600' : 'text-rose-600'}>
+                        {d.isActive ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                    </label>
+                  </td>
                   <td className="px-5 py-2.5 text-right">
                     <button
                       onClick={() => save(p.id)}
@@ -132,7 +158,7 @@ export default function UserManager({
             })}
             {profiles.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-8 text-center text-slate-500">
+                <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
                   Belum ada user terdaftar.
                 </td>
               </tr>

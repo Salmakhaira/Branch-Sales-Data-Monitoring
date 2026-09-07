@@ -28,6 +28,12 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  if (userId === profile.id && isActive === false) {
+    return NextResponse.json(
+      { error: 'Anda tidak dapat menonaktifkan akun Anda sendiri.' },
+      { status: 400 },
+    );
+  }
 
   const supabase = createClient();
   const { error } = await supabase

@@ -8,6 +8,7 @@ import {
   SALESMAN_INPUT_KEYS,
   METRIC_BY_KEY,
   orderedMetrics,
+  columnAppliesToLevel,
   computeRow,
   aggregateRows,
   isFieldLocked,
@@ -507,11 +508,12 @@ export default function UploadPanel({
 /** Kolom ini tampil (punya nilai) di baris bertipe `kind`? Meniru file MOS
  *  asli: kolom level cabang (PLAN SALES MASTER dkk) cuma terisi di baris
  *  cabang; kolom level salesman cuma terisi di baris salesman; baris TOTAL
- *  menampilkan semuanya (hasil agregat). */
+ *  menampilkan semuanya (hasil agregat). Aturan branch/salesman-nya sendiri
+ *  dari `columnAppliesToLevel()` di metrics.ts — satu sumber yang sama
+ *  dipakai InputGrid.tsx supaya keduanya tidak bisa diam-diam berbeda. */
 function columnAppliesTo(col: Metric, kind: PreviewRow['kind']): boolean {
   if (kind === 'total') return true;
-  const isBranchCol = col.level === 'branch';
-  return kind === 'branch' ? isBranchCol : !isBranchCol;
+  return columnAppliesToLevel(col, kind);
 }
 
 /* Preview bergaya Excel asli: header 3 tingkat identik dengan grid input

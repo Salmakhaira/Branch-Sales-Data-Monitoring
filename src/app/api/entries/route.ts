@@ -9,6 +9,18 @@ import {
 } from '@/lib/metrics';
 import type { SaveConflict, SaveRequest } from '@/lib/types';
 
+/** Terima input APAPUN dari payload JSON (bisa jadi bukan client resmi) dan
+ *  ubah jadi angka bersih atau null. Dideklarasikan lewat `unknown`, bukan
+ *  `number | null | undefined`, supaya string kosong `''` — yang tidak
+ *  mungkin dikirim UI resmi tapi mungkin dikirim request manual/devtools —
+ *  eksplisit dianggap "kosong" (null), bukan ikut ke-Number('') = 0 dan
+ *  diam-diam tersimpan sebagai angka nol. */
+function toCleanNumber(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
+
 /* =====================================================================
  *  POST /api/entries
  *  Menyimpan perubahan data report satu cabang.
@@ -183,10 +195,7 @@ export async function POST(request: Request) {
     const cleaned: Record<string, number | null> = { ...prev };
     for (const key of SALESMAN_INPUT_KEYS) {
       if (Object.prototype.hasOwnProperty.call(row.values, key)) {
-        const raw = row.values[key];
-        cleaned[key] = raw === null || raw === undefined || !Number.isFinite(Number(raw))
-          ? null
-          : Number(raw);
+        cleaned[key] = toCleanNumber(row.values[key]);
       }
     }
 
@@ -255,10 +264,7 @@ export async function POST(request: Request) {
     const cleaned: Record<string, number | null> = { ...prevBranch };
     for (const key of BRANCH_INPUT_KEYS) {
       if (Object.prototype.hasOwnProperty.call(branchValues, key)) {
-        const raw = branchValues[key];
-        cleaned[key] = raw === null || raw === undefined || !Number.isFinite(Number(raw))
-          ? null
-          : Number(raw);
+        cleaned[key] = toCleanNumber(branchValues[key]);
       }
     }
 

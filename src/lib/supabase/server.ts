@@ -32,7 +32,12 @@ export function createClient() {
   );
 }
 
-/** Ambil profil + role user yang sedang login. Null bila belum login. */
+/** Ambil profil + role user yang sedang login. Null bila belum login ATAU
+ *  bila akunnya sudah dinonaktifkan admin (`is_active = false`) — sesi
+ *  Supabase Auth-nya sendiri tetap sah, tapi memperlakukannya sebagai
+ *  "tidak login" di sini membuat seluruh pemanggil (layout halaman & setiap
+ *  API route yang mengecek `if (!profile) ...`) otomatis menolak akses
+ *  tanpa perlu masing-masing mengecek is_active sendiri. */
 export async function getProfile(): Promise<Profile | null> {
   const supabase = createClient();
   const {
@@ -46,5 +51,7 @@ export async function getProfile(): Promise<Profile | null> {
     .eq('id', user.id)
     .single();
 
-  return (data as Profile) ?? null;
+  const profile = (data as Profile) ?? null;
+  if (!profile || !profile.is_active) return null;
+  return profile;
 }

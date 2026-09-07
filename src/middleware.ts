@@ -33,14 +33,32 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
-  if (!user && !isPublic) {
+  /* Akun yang dinonaktifkan admin (`profiles.is_active = false`) tetap
+   * punya sesi Supabase Auth yang sah, tapi harus diperlakukan seperti
+   * belum login — sama seperti getProfile() di src/lib/supabase/server.ts.
+   * Sesi lamanya sekalian di-signOut() di sini supaya tidak terjebak
+   * bolak-balik "/" -> redirect ke /login (karena getProfile() menolaknya)
+   * -> redirect balik ke "/" (karena middleware hanya melihat sesi Auth
+   * masih ada). */
+  let isActive = true;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_active')
+      .eq('id', user.id)
+      .single();
+    isActive = profile?.is_active ?? true;
+  }
+
+  if ((!user || !isActive) && !isPublic) {
+    if (user && !isActive) await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('next', path);
     return NextResponse.redirect(url);
   }
 
-  if (user && path === '/login') {
+  if (user && isActive && path === '/login') {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     url.search = '';

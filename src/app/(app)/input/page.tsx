@@ -4,7 +4,7 @@ import {
   getBranchEntry,
   getLastSubmittedWeek,
   getLatestBranchSnapshot,
-  getSnapshotsBeforeWeek,
+  getLatestSnapshots,
   listBranches,
   listEntries,
   listPeriods,
@@ -99,7 +99,7 @@ export default async function InputPage({
   /* Snapshot pembanding untuk aturan "wajib alasan" adalah snapshot
    * TERAKHIR yang pernah di-submit — bukan snapshot minggu sebelumnya.
    * Keduanya beda peran, jadi diambil terpisah. */
-  const latestSnaps = await getSnapshotsBeforeWeek(period.id, branchId, 99);
+  const latestSnaps = await getLatestSnapshots(period.id, branchId);
 
   const initialValues: Record<string, Record<string, number | null>> = {};
   const snapshotValues: Record<string, Record<string, number | null>> = {};

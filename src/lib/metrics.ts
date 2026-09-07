@@ -423,6 +423,17 @@ export const SALESMAN_GRID_KEYS = orderedKeys((m) => m.inGrid && isSalesmanLevel
 /** Kolom yang ditampilkan di panel "Data Tingkat Cabang". */
 export const BRANCH_GRID_KEYS = orderedKeys((m) => m.inGrid && m.level === 'branch');
 
+/** Kolom ini berlaku (punya nilai) di baris bertingkat `level`? Kolom level
+ *  cabang (PLAN SALES MASTER dkk) cuma berlaku di baris cabang, kolom level
+ *  salesman cuma berlaku di baris salesman — sisanya ditampilkan dash "—".
+ *  Satu-satunya sumber untuk aturan ini — dipakai baik oleh grid input
+ *  (InputGrid.tsx) maupun preview upload (UploadPanel.tsx) supaya
+ *  keduanya tidak bisa diam-diam berbeda. */
+export function columnAppliesToLevel(col: Metric, level: 'branch' | 'salesman'): boolean {
+  const isBranchCol = col.level === 'branch';
+  return level === 'branch' ? isBranchCol : !isBranchCol;
+}
+
 /** Hitung satu kolom turunan (dipakai internal oleh rumus lain). */
 export function calcOne(values: ValueMap, ctx: CalcContext, key: string): number {
   const m = METRIC_BY_KEY[key];
