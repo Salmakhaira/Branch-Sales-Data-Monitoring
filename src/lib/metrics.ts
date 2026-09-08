@@ -83,8 +83,32 @@ const n = (x: number | null | undefined): number =>
 
 const div = (a: number, b: number): number => (b === 0 ? 0 : a / b);
 
-/** Kolom mingguan yang dipakai rumus, mengikuti minggu berjalan. */
-const wk = (base: string, ctx: CalcContext) => `${base}_w${Math.min(Math.max(ctx.week, 1), 4)}`;
+/**
+ * FIX (8 September 2026) — dilaporkan: TOTAL OL PRTM di sistem menunjukkan
+ * 0 untuk laporan bulan yang sudah lewat, padahal di file Excel asli
+ * angkanya tidak nol.
+ *
+ * Penyebabnya: untuk periode bulan lampau, `resolveWeek()` di period.ts
+ * selalu mengembalikan Minggu 4 (anggapannya: bulan itu sudah selesai
+ * seluruhnya). Tapi kalau cabang ternyata tidak sempat melaporkan Minggu 4
+ * secara spesifik (act_prtm_w4 & quot_w4_80 kosong), rumus yang kaku pakai
+ * ctx.week=4 menghasilkan 0 + 0 = 0.
+ *
+ * Dibandingkan langsung dengan formula asli di file Excel sumber (dicek
+ * pakai contoh nyata: Sampit, Januari 2026) — file aslinya ternyata
+ * memakai MINGGU TERAKHIR YANG BENAR-BENAR ADA DATANYA, bukan minggu 4
+ * secara paksa. Fungsi ini meniru perilaku itu: telusuri mundur dari
+ * Minggu 4, pakai minggu pertama yang act_prtm-nya sudah diisi (bukan
+ * null/undefined — bukan sekadar dicek 0, karena 0 bisa berarti "sudah
+ * dilaporkan, memang nol", bukan "belum dilaporkan").
+ */
+function lastReportedWeek(v: ValueMap, base: string, fallbackWeek: number): number {
+  for (let w = 4; w >= 1; w--) {
+    const val = v[`${base}_w${w}`];
+    if (val !== null && val !== undefined) return w;
+  }
+  return Math.min(Math.max(fallbackWeek, 1), 4);
+}
 
 /* --------------------------------------------------------------------
  * A. KOLOM INPUT (diisi cabang)
@@ -256,9 +280,12 @@ const derivedMetrics: Metric[] = [
     excel: 'AF',
     inGrid: true,
     inNational: true,
-    hint: 'ACT PRTM minggu berjalan + QUOT CONF >80% minggu berjalan + PO NON SAP',
+    hint: 'ACT PRTM minggu terakhir yang dilaporkan + QUOT CONF >80% minggu itu + PO NON SAP',
     mos: { top: 'OUTLOOK PRTM', sub: 'TOTAL OL PRTM' },
-    formula: (v, ctx) => n(v[wk('act_prtm', ctx)]) + n(v[`quot_w${ctx.week}_80`]) + n(v.po_non_sap),
+    formula: (v, ctx) => {
+      const week = lastReportedWeek(v, 'act_prtm', ctx.week);
+      return n(v[`act_prtm_w${week}`]) + n(v[`quot_w${week}_80`]) + n(v.po_non_sap);
+    },
   },
   {
     key: 'balance_prtm',
@@ -284,7 +311,10 @@ const derivedMetrics: Metric[] = [
     inGrid: true,
     inNational: true,
     mos: { top: 'OUTLOOK PRTM', sub: 'TOTAL PO (POCO+PRTM)' },
-    formula: (v, ctx) => n(v[wk('act_prtm', ctx)]) + n(v.po_last_month_sap),
+    formula: (v, ctx) => {
+      const week = lastReportedWeek(v, 'act_prtm', ctx.week);
+      return n(v[`act_prtm_w${week}`]) + n(v.po_last_month_sap);
+    },
   },
   {
     key: 'total_po_outlook',
