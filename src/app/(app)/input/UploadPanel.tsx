@@ -47,6 +47,10 @@ interface Props {
    *  nilai PLAN SALES MASTER / OL MIN PRTM / ACTUAL SALES dari file. */
   branchCurrentValues: ValueMap;
   branchSnapshotValues: ValueMap;
+  /** Dipanggil setelah commit() berhasil menyimpan (changed > 0) — dipakai
+   *  ReportWorkspace untuk menandai InputGrid supaya tampil "bersih" bila
+   *  user berpindah ke tab Isi Langsung setelahnya. Lihat InputGrid.tsx. */
+  onUploadSuccess?: () => void;
 }
 
 interface DiffCell {
@@ -93,6 +97,7 @@ export default function UploadPanel({
   snapshotValues,
   branchCurrentValues,
   branchSnapshotValues,
+  onUploadSuccess,
 }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -318,6 +323,7 @@ export default function UploadPanel({
         data.withReason ? `, ${data.withReason} disertai alasan.` : '.'
       }`,
     });
+    if (data.changed > 0) onUploadSuccess?.();
     router.refresh();
   }
 
