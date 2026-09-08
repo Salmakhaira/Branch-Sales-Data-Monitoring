@@ -100,7 +100,7 @@ export interface EntryRevision {
   reason_category: string | null;
   reason: string | null;
   locked_week: number | null;
-  source: 'grid' | 'excel_upload' | 'admin';
+  source: 'grid' | 'excel_upload' | 'admin' | 'power_automate';
   changed_by: string | null;
   changed_at: string;
   review_status: 'open' | 'acknowledged' | 'flagged' | null;
@@ -146,7 +146,7 @@ export interface SaveRequest {
   branchValues?: Record<string, number | null>;
   // key salesman: `${salesmanId}:${fieldKey}` — key cabang: `branch:${fieldKey}`
   reasons?: Record<string, { category: string; reason: string }>;
-  source?: 'grid' | 'excel_upload' | 'admin';
+  source?: 'grid' | 'excel_upload' | 'admin' | 'power_automate';
 }
 
 export interface SaveConflict {
