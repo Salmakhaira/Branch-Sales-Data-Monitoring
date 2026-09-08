@@ -10,6 +10,7 @@ import {
   listSalesmen,
 } from '@/lib/report';
 import { aggregateRows, computeRow, orderedMetrics, type ValueMap } from '@/lib/metrics';
+import { resolveWeek } from '@/lib/period';
 import { fmtWhole, fmtPercent, periodLabel } from '@/lib/format';
 import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import PeriodPicker from '@/components/PeriodPicker';
@@ -74,7 +75,11 @@ export default async function NationalPage({
     listBranchEntries(period.id),
   ]);
 
-  const ctx = { week: period.current_week };
+  /* FIX (8 September 2026) — sama seperti /api/export: period.current_week
+   * itu kolom database mentah (default 1, tidak otomatis ter-update),
+   * bukan hasil resolveWeek() yang menghitung minggu yang tepat. */
+  const week = resolveWeek(period);
+  const ctx = { week };
 
   // Baris per salesman, sudah dihitung turunannya
   const rowsBySalesman = new Map<string, ValueMap>();
@@ -122,7 +127,7 @@ export default async function NationalPage({
             Rekap Nasional — {periodLabel(period.year, period.month)}
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Minggu {period.current_week} · dihitung otomatis dari data seluruh cabang. Ini
+            Minggu {week} · dihitung otomatis dari data seluruh cabang. Ini
             menggantikan sheet &ldquo;rekap nasional&rdquo; yang dulu di-link antar file Excel —
             tampilannya dibuat semirip mungkin dengan sheet MOS aslinya.
           </p>
