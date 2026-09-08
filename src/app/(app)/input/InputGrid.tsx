@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   orderedMetrics,
@@ -38,6 +38,14 @@ interface Props {
    *  disimpan bersamaan lewat satu tombol Simpan yang sama. */
   branchInitialValues: ValueMap;
   branchSnapshotValues: ValueMap;
+  /** true bila grid ini muncul tepat setelah upload Excel berhasil di tab
+   *  sebelah — lihat penjelasan lengkap di deklarasi `justSaved` dan di
+   *  ReportWorkspace.tsx. Default (undefined/false) untuk mount biasa. */
+  initialJustSaved?: boolean;
+  /** Dipanggil sekali segera setelah mount, menandai ke ReportWorkspace
+   *  bahwa nilai initialJustSaved sudah "dipakai" — supaya flag itu tidak
+   *  ikut terbawa ke mount berikutnya yang bukan hasil upload baru. */
+  onConsumedInitialJustSaved?: () => void;
 }
 
 export default function InputGrid({
@@ -53,6 +61,8 @@ export default function InputGrid({
   snapshotValues,
   branchInitialValues,
   branchSnapshotValues,
+  initialJustSaved,
+  onConsumedInitialJustSaved,
 }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initialValues);
@@ -84,8 +94,24 @@ export default function InputGrid({
    * supaya "kosong di layar" tidak pernah diam-diam menghapus data asli.
    * Begitu user benar-benar mengetik sesuatu, `justSaved` otomatis mati
    * lagi supaya sisa grid kembali menampilkan angka aslinya sebagai
-   * konteks pengeditan. */
-  const [justSaved, setJustSaved] = useState(false);
+   * konteks pengeditan.
+   *
+   * FIX (7 September 2026) — lihat `initialJustSaved` di Props: nilai
+   * awal state ini sekarang bisa "dipesan" dari luar oleh ReportWorkspace,
+   * khusus untuk kasus mount yang terjadi tepat setelah upload Excel
+   * berhasil (lihat komentar lengkap di ReportWorkspace.tsx). Mount biasa
+   * (pindah cabang/periode, buka halaman pertama kali) tetap `false`
+   * seperti semula — supaya data yang sudah ada tetap langsung terlihat
+   * saat dibuka untuk ditinjau, bukan ikut kosong. */
+  const [justSaved, setJustSaved] = useState(initialJustSaved ?? false);
+
+  // Sekali saja tepat setelah mount — beri tahu ReportWorkspace bahwa
+  // initialJustSaved (kalau true) sudah diserap ke state lokal di atas,
+  // supaya flag itu direset di sana dan tidak salah terbawa ke mount lain.
+  useEffect(() => {
+    onConsumedInitialJustSaved?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* Seluruh kolom W1–W4 selalu tampil, supaya cabang bebas mengisi ke
    * depan maupun memperbaiki ke belakang. Yang terkunci ditandai warna.
