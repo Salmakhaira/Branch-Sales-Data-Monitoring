@@ -8,6 +8,7 @@ import {
   listSalesmen,
 } from '@/lib/report';
 import { aggregateRows, computeRow, type ValueMap } from '@/lib/metrics';
+import { resolveWeek } from '@/lib/period';
 import { buildNationalWorkbook, type NationalRow } from '@/lib/xlsx-styled';
 import { monthName } from '@/lib/format';
 
@@ -55,7 +56,12 @@ export async function GET(request: Request) {
     });
   }
 
-  const ctx = { week: period.current_week };
+  /* FIX (8 September 2026) — sebelumnya pakai period.current_week mentah,
+   * yang cuma kolom database (default 1, tidak otomatis ter-update) —
+   * bukan hasil resolveWeek() yang benar-benar menghitung minggu yang
+   * tepat berdasarkan tanggal & status periode. Konsisten dengan halaman
+   * /national dan grid input yang sudah pakai resolveWeek() sejak awal. */
+  const ctx = { week: resolveWeek(period) };
 
   const rowsBySalesman = new Map<string, ValueMap>();
   for (const e of entries) {
