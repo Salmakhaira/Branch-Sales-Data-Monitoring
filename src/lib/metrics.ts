@@ -137,7 +137,7 @@ const weeklyMetrics = (): Metric[] => {
       week: w,
       excel: c5080,
       inGrid: true,
-      inNational: false,
+      inNational: true,
       mos: { top: 'OUTLOOK PRTM', sub: `QUOT CONFIDENCE W${w}`, tier: '>50%-80%' },
     });
     out.push({
@@ -149,7 +149,7 @@ const weeklyMetrics = (): Metric[] => {
       week: w,
       excel: c50,
       inGrid: true,
-      inNational: false,
+      inNational: true,
       mos: { top: 'OUTLOOK PRTM', sub: `QUOT CONFIDENCE W${w}`, tier: '<50%' },
     });
   }
