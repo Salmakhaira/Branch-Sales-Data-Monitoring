@@ -36,6 +36,14 @@ interface Props {
 export default function ReportWorkspace(props: Props) {
   const [mode, setMode] = useState<Mode>('grid');
 
+  /* Ditandai true tepat setelah UploadPanel berhasil menyimpan, dikonsumsi
+   * sekali oleh InputGrid sebagai initialJustSaved lalu direset di sini —
+   * lihat komentar panjang di dalam InputGrid.tsx (`justSaved`) untuk
+   * kronologi lengkap kenapa ini dibutuhkan: tanpa ini, berpindah dari tab
+   * "Upload Excel" ke "Isi Langsung" tepat setelah upload menampilkan
+   * angka yang baru terunggah seolah draf yang belum tersimpan. */
+  const [justUploaded, setJustUploaded] = useState(false);
+
   /* Ditemukan saat menyisir alur (3 September 2026): InputGrid & UploadPanel
    * menyimpan draf yang sedang diketik di STATE React lokal (`values`,
    * `branchValues` di InputGrid; `parsed`, dst. di UploadPanel), diisi
@@ -103,6 +111,8 @@ export default function ReportWorkspace(props: Props) {
           snapshotValues={props.snapshotValues}
           branchInitialValues={props.branchInitialValues}
           branchSnapshotValues={props.branchSnapshotValues}
+          initialJustSaved={justUploaded}
+          onConsumedInitialJustSaved={() => setJustUploaded(false)}
         />
       ) : (
         <UploadPanel
@@ -121,6 +131,7 @@ export default function ReportWorkspace(props: Props) {
           snapshotValues={props.snapshotValues}
           branchCurrentValues={props.branchInitialValues}
           branchSnapshotValues={props.branchSnapshotValues}
+          onUploadSuccess={() => setJustUploaded(true)}
         />
       )}
     </div>
