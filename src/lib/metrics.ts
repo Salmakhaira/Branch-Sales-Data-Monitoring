@@ -482,7 +482,21 @@ export function computeRow(values: ValueMap, ctx: CalcContext): ValueMap {
 export function aggregateRows(rows: ValueMap[], ctx: CalcContext): ValueMap {
   const sum: ValueMap = {};
   for (const key of INPUT_KEYS) {
-    sum[key] = rows.reduce((acc, r) => acc + n(r[key]), 0);
+    /* FIX (8 September 2026) — sebelumnya semua nilai (termasuk null)
+     * langsung dijumlah lewat n() yang mengubah null jadi 0, sehingga
+     * "SEMUA salesman belum lapor Minggu 4" (harusnya tetap null di level
+     * cabang) berubah jadi "0" begitu naik ke level total cabang — angka
+     * 0 itu lalu disalahartikan lastReportedWeek() sebagai "sudah
+     * dilaporkan, isinya nol", bukan "belum dilaporkan sama sekali".
+     * Ini yang bikin TOTAL OL PRTM tetap 0 di Rekap Nasional meskipun
+     * data tiap salesman individual sudah benar (null, bukan 0).
+     *
+     * Perbaikannya: kalau TIDAK ADA satu pun baris yang benar-benar
+     * melaporkan field ini (semuanya null/undefined), hasil jumlahnya
+     * tetap null — bukan 0 — supaya sinyal "belum dilaporkan" itu ikut
+     * naik ke level agregat, bukan hilang di tengah jalan. */
+    const adaYangLapor = rows.some((r) => r[key] !== null && r[key] !== undefined);
+    sum[key] = adaYangLapor ? rows.reduce((acc, r) => acc + n(r[key]), 0) : null;
   }
   return computeRow(sum, ctx);
 }
