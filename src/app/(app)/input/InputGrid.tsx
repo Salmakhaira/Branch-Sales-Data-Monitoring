@@ -517,9 +517,19 @@ export default function InputGrid({
                   const v = branchComputed[c.key];
                   return (
                     <td key={c.key} className="cell-derived">
-                      {/* Ikut kosong sesaat setelah simpan, konsisten
-                          dengan sel input di sebelahnya — lihat `justSaved`. */}
-                      {justSaved ? '' : c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                      {/* FIX (8 September 2026): sebelumnya kolom ini ikut
+                          disamarkan kosong saat justSaved, mengikuti sel
+                          input di sebelahnya. Ternyata itu bikin TOTAL OL
+                          PRTM tampak "tidak terbaca" — karena justSaved
+                          cuma mati saat blur (pindah fokus), jadi begitu
+                          user mengetik satu komponen lalu langsung melirik
+                          Total tanpa klik keluar dulu, angkanya kelihatan
+                          kosong padahal sudah terhitung benar di balik
+                          layar. Kolom turunan bukan angka yang "diketik"
+                          dan bisa batal — dia cuma pembacaan hasil hitung,
+                          jadi TIDAK ikut logika justSaved lagi, selalu
+                          tampilkan nilai aslinya. */}
+                      {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
                     </td>
                   );
                 }
@@ -541,7 +551,9 @@ export default function InputGrid({
                     const v = computedRows[s.id]?.[c.key];
                     return (
                       <td key={c.key} className="cell-derived">
-                        {justSaved ? '' : c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                        {/* Lihat penjelasan lengkap di baris cabang di atas
+                            — kolom turunan tidak lagi ikut logika justSaved. */}
+                        {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
                       </td>
                     );
                   }
@@ -562,11 +574,11 @@ export default function InputGrid({
               </td>
               {columns.map((c) => (
                 <td key={c.key} className="px-2 py-2 text-right tabular-nums text-slate-800">
-                  {justSaved
-                    ? ''
-                    : c.format === 'percent'
-                      ? fmtPercent(branchTotal[c.key])
-                      : fmtNumber(branchTotal[c.key])}
+                  {/* Sama seperti kolom turunan lainnya — baris TOTAL ini
+                      murni hasil agregasi (aggregateRows), tidak pernah
+                      diketik langsung, jadi tidak lagi ikut disamarkan
+                      oleh justSaved. Lihat penjelasan lengkap di atas. */}
+                  {c.format === 'percent' ? fmtPercent(branchTotal[c.key]) : fmtNumber(branchTotal[c.key])}
                 </td>
               ))}
             </tr>
