@@ -443,3 +443,99 @@ Bagian ini disiapkan untuk tahap berikutnya, bukan kelalaian:
   ditarik otomatis, bukan diketik. Ini penghapus human error terbesar berikutnya.
 - **Riwayat grafik** — tren OL Revenue per cabang antar minggu; datanya sudah tersimpan
   lengkap di `report_snapshots`, tinggal divisualkan.
+
+---
+
+## 11. Integrasi OneDrive (Power Automate)
+
+Cabang bisa mengisi laporan tanpa membuka website sama sekali: cukup simpan file MOS-nya
+di folder OneDrive, dan **Power Automate** yang mengirim datanya secara otomatis ke sistem
+lewat webhook.
+
+### Kenapa Power Automate, bukan Microsoft Graph API langsung
+
+Migration `006_hapus_onedrive.sql` mencabut mode OneDrive versi lama yang connect langsung
+ke Microsoft Graph API — itu membutuhkan registrasi aplikasi ke Azure Active Directory dan
+**admin consent** dari tim IT tenant, sebuah proses yang panjang dan di luar kendali tim
+proyek. Power Automate tidak butuh itu: ia memakai akses OneDrive milik pembuat flow-nya
+sendiri, sehingga bisa disiapkan tanpa menunggu proses IT terpisah.
+
+| | Microsoft Graph API langsung (sudah dicabut) | Power Automate (dipakai sekarang) |
+|---|---|---|
+| Perlu admin consent Azure AD | Ya, wajib | Tidak |
+| Siapa yang bisa setup | Hanya lewat Azure Portal (IT) | Siapa pun dengan akses OneDrive + Power Automate |
+| Arah aliran data | Website menarik data (pull) | Power Automate mengirim data (push) |
+| Kredensial Microsoft yang disimpan website | Client ID & Secret | Tidak ada sama sekali |
+
+### Bagaimana data ini divalidasi
+
+Ini bagian terpenting: file yang masuk lewat Power Automate **tidak** melewati jalur pintas
+sendiri. Baik grid manual, upload Excel manual, maupun webhook Power Automate, ketiganya
+memanggil fungsi bersama yang sama persis — `src/lib/saveEntries.ts` — sehingga aturan
+locking mingguan, wajib-alasan untuk perubahan pada data yang sudah di-submit, dan pencatatan
+`entry_revisions` berlaku identik apa pun jalur masuknya.
+
+Satu perbedaan yang disengaja: kalau file yang masuk otomatis ternyata mengandung perubahan
+pada angka minggu yang **sudah terkunci** (yang biasanya memicu modal pengisian alasan di
+UI), sistem **melewati sel itu saja** — tidak menyimpannya, tidak mengarang alasan atas nama
+sistem, dan mencatatnya di `onedrive_sync_runs` sebagai perlu ditinjau admin. Ini supaya
+integrasi otomatis tidak melemahkan jejak audit yang jadi inti sistem ini.
+
+### Setup environment variable
+
+Tambahkan di `.env.local` (lihat juga `.env.local.example`):
+
+```
+SUPABASE_SERVICE_ROLE_KEY=...   # Supabase Dashboard > Project Settings > API
+ONEDRIVE_WEBHOOK_SECRET=...      # string acak panjang buatan sendiri
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` dipakai webhook untuk menulis data tanpa sesi login (melewati
+RLS) — **jangan** pernah diberi prefix `NEXT_PUBLIC_`, dan jangan pernah dipakai di kode
+sisi browser. `ONEDRIVE_WEBHOOK_SECRET` yang membuktikan bahwa request ke webhook memang
+berasal dari flow Power Automate Anda, bukan pihak lain yang menebak alamatnya.
+
+### Setup flow di Power Automate
+
+Satu flow memantau satu folder cabang. Ringkasannya (buka
+[make.powerautomate.com](https://make.powerautomate.com)):
+
+1. **Automated cloud flow** baru, trigger **"When a file is created or modified (properties
+   only)"** dari connector OneDrive for Business, arahkan ke folder cabang tersebut.
+2. Action **"Get file content"** — ambil isi file yang berubah.
+3. Action **HTTP**, method POST, ke:
+   ```
+   https://<domain-website-anda>/api/webhook/onedrive-sync
+   ```
+   Header:
+   ```
+   Content-Type: application/json
+   x-webhook-secret: <isi sama dengan ONEDRIVE_WEBHOOK_SECRET>
+   ```
+   Body:
+   ```json
+   {
+     "branchCode": "SMD-1",
+     "fileName": "@{triggerOutputs()?['body/Name']}",
+     "fileContentBase64": "@{base64(body('Get_file_content'))}"
+   }
+   ```
+   Ganti `"SMD-1"` dengan kode cabang yang sesuai (lihat kolom `code` di tabel `branches`) —
+   nilai ini teks tetap per flow, bukan dynamic content, karena satu flow memang untuk satu
+   cabang.
+4. Simpan dan aktifkan. Untuk cabang lain, gunakan **Save As** pada flow ini lalu ganti dua
+   hal saja: folder di trigger, dan `branchCode` di Body.
+
+### Memantau kesehatan sinkronisasi
+
+Halaman **Administrasi Sistem** (`/admin`) menampilkan riwayat tiap panggilan webhook per
+cabang, dan menandai cabang yang belum ada sinkronisasi sukses dalam 26 jam terakhir —
+supaya flow yang diam-diam berhenti (kredensial OneDrive kedaluwarsa, folder dipindah, dst.)
+terlihat dari dashboard, bukan baru ketahuan saat cabang komplain datanya belum masuk.
+
+### Struktur folder yang diharapkan
+
+Sama seperti file MOS yang diunggah manual — satu file per cabang, format dan sheet yang
+sama seperti yang dibaca `parseBranchTemplate()` di `src/lib/excel.ts`. Tidak ada perubahan
+format khusus untuk jalur otomatis ini.
+
