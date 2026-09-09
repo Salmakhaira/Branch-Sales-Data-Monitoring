@@ -34,11 +34,19 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Administrasi Sistem</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Kelola hak akses user. Periode dan minggu pelaporan berjalan sendiri.
-        </p>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900">Administrasi Sistem</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Kelola hak akses user. Periode dan minggu pelaporan berjalan sendiri.
+          </p>
+        </div>
+        <Link
+          href="/admin/bulk-import"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          Impor Massal (Backfill Banyak Bulan)
+        </Link>
       </div>
 
       <div className="space-y-6">
