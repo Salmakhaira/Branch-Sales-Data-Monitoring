@@ -179,6 +179,34 @@ function pickSheet(wb: XLSX.WorkBook, ctx: ParseContext): string | null {
   return null;
 }
 
+/**
+ * Telusuri SEMUA sheet dalam satu workbook yang namanya cocok sebagai
+ * "sheet bulan" (BULAN TAHUN), dipakai untuk backfill banyak bulan
+ * sekaligus dari satu file — bukan cuma satu bulan seperti pickSheet().
+ * Memakai logika pencocokan yang PERSIS SAMA dengan pickSheet() (dicoba
+ * untuk tiap kombinasi bulan 1-12 x rentang tahun wajar), supaya hasil
+ * deteksi konsisten dengan apa yang dibaca jalur upload satu-bulan biasa.
+ */
+export function detectMonthSheets(
+  wb: XLSX.WorkBook,
+  yearRange: { from: number; to: number } = { from: 2020, to: 2035 },
+): Array<{ sheetName: string; year: number; month: number }> {
+  const found: Array<{ sheetName: string; year: number; month: number }> = [];
+  const claimedSheets = new Set<string>();
+
+  for (let year = yearRange.from; year <= yearRange.to; year++) {
+    for (let month = 1; month <= 12; month++) {
+      const sheetName = pickSheet(wb, { salesmen: [], branchCode: '', branchName: '', year, month });
+      if (sheetName && !claimedSheets.has(sheetName)) {
+        found.push({ sheetName, year, month });
+        claimedSheets.add(sheetName);
+      }
+    }
+  }
+
+  return found;
+}
+
 type Grid = (string | number | null)[][];
 
 function sheetToGrid(ws: XLSX.WorkSheet): Grid {
