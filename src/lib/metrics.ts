@@ -235,18 +235,18 @@ const inputMetrics: Metric[] = [
   },
 
   // OUTLOOK REVENUE TM - POCO  (di file asli: baris 4 'POCO' merge AL4:AO4)
-  { key: 'poco_not_active', label: 'POCO NOT ACTIVE', group: 'OUTLOOK REVENUE - POCO', kind: 'input', scope: 'monthly', excel: 'AL', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'POCO', tier: 'NOT ACTIVE' } },
+  { key: 'poco_not_active', label: 'POCO NOT ACTIVE', group: 'OUTLOOK REVENUE - POCO', kind: 'input', scope: 'monthly', excel: 'AL', inGrid: true, inNational: true, mos: { top: 'OUTLOOK REVENUE TM', sub: 'POCO', tier: 'NOT ACTIVE' } },
   { key: 'poco_plafond',    label: 'POCO PLAFOND',    group: 'OUTLOOK REVENUE - POCO', kind: 'input', scope: 'monthly', excel: 'AM', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'POCO', tier: 'PLAFOND' } },
   { key: 'poco_internal',   label: 'POCO INTERNAL',   group: 'OUTLOOK REVENUE - POCO', kind: 'input', scope: 'monthly', excel: 'AN', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'POCO', tier: 'INTERNAL' } },
   { key: 'poco_external',   label: 'POCO EXTERNAL',   group: 'OUTLOOK REVENUE - POCO', kind: 'input', scope: 'monthly', excel: 'AO', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'POCO', tier: 'EXTERNAL' } },
 
   // OUTLOOK REVENUE TM - PRTM  (di file asli: baris 4 'PRTM' merge AP4:AS4)
-  { key: 'prtm_not_active', label: 'PRTM NOT ACTIVE', group: 'OUTLOOK REVENUE - PRTM', kind: 'input', scope: 'monthly', excel: 'AP', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'PRTM', tier: 'NOT ACTIVE' } },
+  { key: 'prtm_not_active', label: 'PRTM NOT ACTIVE', group: 'OUTLOOK REVENUE - PRTM', kind: 'input', scope: 'monthly', excel: 'AP', inGrid: true, inNational: true, mos: { top: 'OUTLOOK REVENUE TM', sub: 'PRTM', tier: 'NOT ACTIVE' } },
   { key: 'prtm_plafond',    label: 'PRTM PLAFOND',    group: 'OUTLOOK REVENUE - PRTM', kind: 'input', scope: 'monthly', excel: 'AQ', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'PRTM', tier: 'PLAFOND' } },
   { key: 'prtm_internal',   label: 'PRTM INTERNAL',   group: 'OUTLOOK REVENUE - PRTM', kind: 'input', scope: 'monthly', excel: 'AR', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'PRTM', tier: 'INTERNAL' } },
   { key: 'prtm_external',   label: 'PRTM EXTERNAL',   group: 'OUTLOOK REVENUE - PRTM', kind: 'input', scope: 'monthly', excel: 'AS', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'PRTM', tier: 'EXTERNAL' } },
 
-  { key: 'quot_conf_80_ready',   label: 'QUOT CONF >80% READY',    group: 'OUTLOOK REVENUE - TAMBAHAN', kind: 'input', scope: 'monthly', excel: 'AU', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'QUOT CONF >80% READY' } },
+  { key: 'quot_conf_80_ready',   label: 'QUOT CONF >80% READY',    group: 'OUTLOOK REVENUE - TAMBAHAN', kind: 'input', scope: 'monthly', excel: 'AU', inGrid: true, inNational: true, mos: { top: 'OUTLOOK REVENUE TM', sub: 'QUOT CONF >80% READY' } },
   { key: 'quot_conf_5080_ready', label: 'QUOT CONF >50%-80% READY', group: 'OUTLOOK REVENUE - TAMBAHAN', kind: 'input', scope: 'monthly', excel: 'AV', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'QUOT CONF >50%-80% READY' } },
   { key: 'po_non_sap_ready',     label: 'PO NON SAP READY',        group: 'OUTLOOK REVENUE - TAMBAHAN', kind: 'input', scope: 'monthly', excel: 'AW', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'PO NON SAP READY' } },
   { key: 'extra_efforts',        label: 'EXTRA EFFORTS',           group: 'OUTLOOK REVENUE - TAMBAHAN', kind: 'input', scope: 'monthly', excel: 'AX', inGrid: true, inNational: false, mos: { top: 'OUTLOOK REVENUE TM', sub: 'EXTRA EFFORTS' } },
@@ -259,7 +259,7 @@ const inputMetrics: Metric[] = [
     scope: 'monthly',
     excel: 'BM',
     inGrid: true,
-    inNational: true,
+    inNational: false,
     level: 'branch',
     hint: 'Angka tingkat cabang dari SAP — satu nilai untuk seluruh cabang, bukan per salesman.',
     mos: { top: 'ACTUAL SALES', sub: 'AMOUNT' },
