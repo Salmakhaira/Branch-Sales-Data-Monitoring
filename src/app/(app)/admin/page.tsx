@@ -1,281 +1,85 @@
 import Link from 'next/link';
-import { getProfile, createClient } from '@/lib/supabase/server';
-import {
-  getActivePeriod,
-  getSubmissionMatrix,
-  listAreas,
-  listBranches,
-  listBranchEntries,
-  listEntries,
-  listPeriods,
-} from '@/lib/report';
-import { aggregateRows, computeRow, type ValueMap } from '@/lib/metrics';
-import { fmtDateTime, fmtWhole, monthName, periodLabel } from '@/lib/format';
-import { describeWeek } from '@/lib/period';
-import PeriodPicker from '@/components/PeriodPicker';
-import RevisionMonitor from '@/components/RevisionMonitor';
-import LockWeekButton from '@/components/LockWeekButton';
+import { redirect } from 'next/navigation';
+import { createClient, getProfile } from '@/lib/supabase/server';
+import { getActivePeriod, listBranches, listSalesmen } from '@/lib/report';
+import PeriodStatus from '@/components/admin/PeriodStatus';
+import UserManager from '@/components/admin/UserManager';
+import OneDriveSyncStatus from '@/components/admin/OneDriveSyncStatus';
+import type { Profile } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SummaryPage({
-  searchParams,
-}: {
-  searchParams: { period?: string; branch?: string; status?: string };
-}) {
+export default async function AdminPage() {
   const profile = await getProfile();
-  const period = await getActivePeriod(searchParams.period);
-
-  if (!period) {
+  if (!profile) redirect('/login');
+  if (profile.role !== 'admin') {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-        <h3 className="text-sm font-semibold text-slate-800">Belum ada periode pelaporan</h3>
-        <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">
-          Administrator perlu membuat periode terlebih dahulu di menu Administrasi.
-        </p>
+      <div className="mx-auto max-w-2xl py-20 text-center">
+        <h2 className="text-sm font-semibold text-slate-800">Akses ditolak</h2>
+        <p className="mt-1 text-xs text-slate-500">Halaman ini hanya untuk Administrator.</p>
+        <Link href="/" className="mt-4 inline-block text-xs text-brand-600 underline">
+          Kembali ke Ringkasan
+        </Link>
       </div>
     );
   }
 
-  const [periods, areas, branches, entries, submissions, branchEntries] = await Promise.all([
-    listPeriods(),
-    listAreas(),
+  const supabase = createClient();
+  const [period, branches, salesmen, { data: profiles }] = await Promise.all([
+    getActivePeriod(),
     listBranches(),
-    listEntries(period.id),
-    getSubmissionMatrix(period.id),
-    listBranchEntries(period.id),
+    listSalesmen(),
+    supabase.from('profiles').select('*').order('email'),
   ]);
 
-  const ctx = { week: period.current_week };
-  const areaByBranch = new Map(branches.map((b) => [b.id, b.area_id]));
-  const rowsByBranch = new Map<string, ValueMap[]>();
-  for (const e of entries) {
-    const list = rowsByBranch.get(e.branch_id) ?? [];
-    list.push(computeRow(e.values ?? {}, ctx));
-    rowsByBranch.set(e.branch_id, list);
-  }
-  // PLAN SALES MASTER/OL MIN PRTM/ACTUAL SALES — data tingkat cabang,
-  // ditambahkan sebagai "baris" tambahan per cabang supaya ikut terjumlah.
-  for (const b of branches) {
-    const values = branchEntries.get(b.id)?.values;
-    if (!values) continue;
-    const list = rowsByBranch.get(b.id) ?? [];
-    list.push(values);
-    rowsByBranch.set(b.id, list);
-  }
-
-  const national = aggregateRows([...rowsByBranch.values()].flat(), ctx);
-
-  const submittedThisWeek = branches.filter((b) =>
-    (submissions.get(b.id)?.weeks ?? []).includes(period.current_week),
-  ).length;
-
-  // "Update terakhir" per cabang: sebelumnya cuma memakai jam SUBMIT
-  // (branch_submissions.submitted_at), jadi tidak ikut maju kalau ada
-  // koreksi sesudahnya ke sel yang sudah terkunci (jalur wajib-alasan) —
-  // padahal itu jelas-jelas perubahan data yang lebih baru. Sekarang
-  // dipakai jam TERBARU dari tiga sumber: submit, dan updated_at di
-  // report_entries/report_branch_entries (naik setiap kali sel manapun
-  // disimpan, terkunci atau tidak).
-  const lastActivityByBranch = new Map<string, string>();
-  const bumpActivity = (branchId: string, ts: string | null | undefined) => {
-    if (!ts) return;
-    const cur = lastActivityByBranch.get(branchId);
-    if (!cur || ts > cur) lastActivityByBranch.set(branchId, ts);
-  };
-  for (const e of entries) bumpActivity(e.branch_id, e.updated_at);
-  for (const b of branches) bumpActivity(b.id, branchEntries.get(b.id)?.updated_at);
-  for (const [branchId, s] of submissions) bumpActivity(branchId, s.lastAt);
-
-  const supabase = createClient();
-  const { count: openRevisions } = await supabase
-    .from('entry_revisions')
-    .select('id', { count: 'exact', head: true })
-    .eq('period_id', period.id)
-    .eq('requires_reason', true)
-    .eq('review_status', 'open');
-
-  const isHO = profile?.role === 'ho_pic' || profile?.role === 'admin';
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Periode {periodLabel(period.year, period.month)}
-          </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            <strong>Minggu {period.current_week}</strong> ·{' '}
-            {describeWeek(period.year, period.month, period.current_week, monthName(period.month))}
-            {!period.is_open && ' · periode ditutup'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <PeriodPicker periods={periods} current={period.id} />
-          {isHO && period.is_open && (
-            <LockWeekButton
-              periodId={period.id}
-              week={period.current_week}
-              periodLabel={periodLabel(period.year, period.month)}
-            />
-          )}
-          {profile?.role !== 'ho_pic' && (
-            <Link
-              href="/input"
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700"
-            >
-              Isi Report Cabang
-            </Link>
-          )}
-        </div>
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Administrasi Sistem</h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Kelola hak akses user. Periode dan minggu pelaporan berjalan sendiri.
+        </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          label="Cabang sudah submit"
-          value={`${submittedThisWeek} / ${branches.length}`}
-          sub={`Minggu ${period.current_week}`}
-        />
-        <Stat
-          label="Total OL Revenue"
-          value={fmtWhole(national.total_ol_revenue)}
-        />
-        {/* RATIO OL/PO sudah dihapus dari daftar kolom, jadi kartu ini
-            diganti TOTAL PO OUTLOOK yang masih ada dan sama informatifnya. */}
-        <Stat
-          label="Total PO Outlook"
-          value={fmtWhole(national.total_po_outlook)}
-        />
-        <Stat
-          label="Perubahan perlu ditinjau"
-          value={String(openRevisions ?? 0)}
-          tone={openRevisions && openRevisions > 0 ? 'warn' : 'normal'}
-          href="#perubahan"
-        />
-      </div>
+      <div className="space-y-6">
+        <PeriodStatus period={period} />
 
-      <section className="rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-5 py-3">
-          <h3 className="text-sm font-semibold text-slate-900">Status Pengisian per Cabang</h3>
-          <p className="text-xs text-slate-500">
-            🟩 Hijau = sudah submit dan angka terkunci &nbsp;·&nbsp; 🟨 Kuning = belum diisi
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-2 font-medium">Cabang</th>
-                <th className="px-3 py-2 font-medium">Area</th>
-                <th className="px-3 py-2 text-center font-medium">W1</th>
-                <th className="px-3 py-2 text-center font-medium">W2</th>
-                <th className="px-3 py-2 text-center font-medium">W3</th>
-                <th className="px-3 py-2 text-center font-medium">W4</th>
-                <th className="px-3 py-2 text-right font-medium">Total OL Revenue</th>
-                <th className="px-3 py-2 text-right font-medium">Actual Sales</th>
-                <th className="px-5 py-2 text-right font-medium">Update terakhir</th>
-              </tr>
-            </thead>
-            <tbody>
-              {branches.map((b) => {
-                const sub = submissions.get(b.id);
-                const rows = rowsByBranch.get(b.id) ?? [];
-                const agg = aggregateRows(rows, ctx);
-                const area = areas.find((a) => a.id === areaByBranch.get(b.id));
-                return (
-                  <tr key={b.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-5 py-2.5">
-                      <span className="font-medium text-slate-800">{b.name}</span>
-                      <span className="ml-2 text-[11px] text-slate-400">{b.code}</span>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-slate-500">{area?.code ?? '-'}</td>
-                    {[1, 2, 3, 4].map((w) => (
-                      <td key={w} className="px-3 py-2.5 text-center">
-                        <span
-                          className={`inline-block h-4 w-8 rounded ${
-                            sub?.weeks.includes(w) ? 'bg-emerald-500' : 'bg-amber-300'
-                          }`}
-                          title={
-                            sub?.weeks.includes(w)
-                              ? `Minggu ${w} sudah submit dan angka terkunci`
-                              : `Minggu ${w} belum diisi`
-                          }
-                        />
-                      </td>
+        <UserManager profiles={(profiles as Profile[]) ?? []} branches={branches} meId={profile.id} />
+
+        <OneDriveSyncStatus />
+
+        <section className="rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-5 py-3">
+            <h3 className="text-sm font-semibold text-slate-900">Master Cabang & Salesman</h3>
+            <p className="text-xs text-slate-500">
+              {branches.length} cabang aktif, {salesmen.length} salesman. Penambahan/perubahan
+              dilakukan lewat Supabase Table Editor atau SQL, lalu tampil otomatis di sini.
+            </p>
+          </div>
+          <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+            {branches.map((b) => {
+              const list = salesmen.filter((s) => s.branch_id === b.id);
+              return (
+                <div key={b.id} className="bg-white p-4">
+                  <p className="text-xs font-semibold text-slate-800">
+                    {b.name} <span className="font-normal text-slate-400">({b.code})</span>
+                  </p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {list.map((s) => (
+                      <li key={s.id} className="text-[11px] text-slate-500">
+                        • {s.name}
+                      </li>
                     ))}
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                      {fmtWhole(agg.total_ol_revenue)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                      {fmtWhole(agg.actual_sales)}
-                    </td>
-                    <td className="px-5 py-2.5 text-right text-xs text-slate-500">
-                      {fmtDateTime(lastActivityByBranch.get(b.id)) || '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                <td className="px-5 py-2.5 text-slate-800" colSpan={6}>
-                  GRAND TOTAL NASIONAL
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">
-                  {fmtWhole(national.total_ol_revenue)}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">
-                  {fmtWhole(national.actual_sales)}
-                </td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </section>
-
-      <div id="perubahan" className="scroll-mt-24">
-        <RevisionMonitor
-          period={period}
-          branches={branches}
-          isHO={isHO}
-          branchFilter={searchParams.branch}
-          statusFilter={searchParams.status}
-        />
+                    {list.length === 0 && (
+                      <li className="text-[11px] italic text-amber-600">Belum ada salesman</li>
+                    )}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  tone = 'normal',
-  href,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: 'normal' | 'warn';
-  href?: string;
-}) {
-  const inner = (
-    <div
-      className={`h-full rounded-xl border p-4 ${
-        tone === 'warn' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'
-      } ${href ? 'transition hover:shadow-sm' : ''}`}
-    >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-slate-500">{sub}</p>}
-    </div>
-  );
-  return href ? (
-    <a href={href} className="block">
-      {inner}
-    </a>
-  ) : (
-    inner
   );
 }
