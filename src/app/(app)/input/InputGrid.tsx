@@ -46,6 +46,21 @@ interface Props {
    *  bahwa nilai initialJustSaved sudah "dipakai" — supaya flag itu tidak
    *  ikut terbawa ke mount berikutnya yang bukan hasil upload baru. */
   onConsumedInitialJustSaved?: () => void;
+  /**
+   * FIX (10 September 2026) — dipisah atas permintaan user supaya fungsi
+   * "isi data baru" dan "koreksi data lama" tidak bercampur di satu
+   * tampilan yang sama, membingungkan mana yang boleh diisi bebas dan
+   * mana yang butuh alasan:
+   *
+   * - 'entry'  (tab "Isi Langsung"): sel yang SUDAH terkunci jadi
+   *   read-only murni di sini — tidak bisa diedit sama sekali. Kalau mau
+   *   koreksi data yang sudah terkunci, harus lewat tab "Ubah Data".
+   * - 'correction' (tab "Ubah Data", BARU): kebalikannya — sel yang
+   *   BELUM terkunci jadi read-only (halaman ini bukan tempat mengisi
+   *   data baru), dan cuma sel yang sudah terkunci yang bisa diedit,
+   *   selalu lewat alur wajib-alasan.
+   */
+  mode: 'entry' | 'correction';
 }
 
 export default function InputGrid({
@@ -63,6 +78,7 @@ export default function InputGrid({
   branchSnapshotValues,
   initialJustSaved,
   onConsumedInitialJustSaved,
+  mode,
 }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(initialValues);
@@ -306,7 +322,31 @@ export default function InputGrid({
     const dirty = dirtyCells.has(cellKey);
     const needsReason = needsReasonCells.has(cellKey);
     const empty = raw === null || raw === undefined;
-    const highlightRequired = requiredEmpty && empty && !dirty && !needsReason;
+    const highlightRequired = mode === 'entry' && requiredEmpty && empty && !dirty && !needsReason;
+
+    // Inti pemisahan dua tab: di 'entry' sel yang SUDAH terkunci tidak
+    // boleh disentuh sama sekali (arahkan ke tab Ubah Data); di
+    // 'correction' justru sel yang BELUM terkunci yang tidak boleh
+    // disentuh (halaman ini bukan tempat mengisi data baru).
+    const editableHere = mode === 'entry' ? !locked : locked;
+
+    if (!editableHere) {
+      const displayRaw = justSaved ? null : raw;
+      const displayVal = displayRaw === null || displayRaw === undefined ? null : Math.round(displayRaw);
+      return (
+        <td
+          key={c.key}
+          className="cell-readonly-other-mode p-0"
+          title={
+            mode === 'entry'
+              ? `Sudah dilaporkan pada Minggu ${lastSubmittedWeek} — untuk koreksi, buka tab "Ubah Data".`
+              : 'Belum terkunci — isi lewat tab "Isi Langsung", bukan di sini.'
+          }
+        >
+          <div className="cell-input cell-input--readonly">{displayVal === null ? '' : fmtWhole(displayVal)}</div>
+        </td>
+      );
+    }
 
     /* Lihat komentar di deklarasi `justSaved` di atas: yang TAMPIL sengaja
      * dikosongkan setelah simpan berhasil, tanpa menyentuh `raw`/state
@@ -373,17 +413,36 @@ export default function InputGrid({
 
   return (
     <div className="space-y-3">
+      {mode === 'correction' && (
+        <div className="rounded-lg bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+          <strong>Mode Ubah Data</strong> — khusus mengoreksi angka yang sudah terkunci
+          (sudah di-submit). Sel yang belum terkunci sengaja tidak bisa diisi di sini — buka
+          tab <strong>&quot;Isi Langsung&quot;</strong> untuk mengisi data baru.
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600">
-          <LegendSwatch className="bg-white ring-1 ring-slate-200" label="Bisa diisi" />
-          <LegendSwatch className="cell-required" label="Wajib diisi, belum diisi" />
-          <LegendSwatch
-            className="cell-locked ring-1 ring-amber-200"
-            label="Terkunci — ubah = wajib alasan"
-          />
-          <LegendSwatch className="cell-changed" label="Diubah, belum disimpan" />
-          <LegendSwatch className="bg-slate-100" label="Dihitung otomatis" />
+          {mode === 'entry' ? (
+            <>
+              <LegendSwatch className="bg-white ring-1 ring-slate-200" label="Bisa diisi" />
+              <LegendSwatch className="cell-required" label="Wajib diisi, belum diisi" />
+              <LegendSwatch className="bg-slate-50 text-slate-400" label="Sudah terkunci (lihat tab Ubah Data)" />
+              <LegendSwatch className="cell-changed" label="Diubah, belum disimpan" />
+              <LegendSwatch className="bg-slate-100" label="Dihitung otomatis" />
+            </>
+          ) : (
+            <>
+              <LegendSwatch
+                className="cell-locked ring-1 ring-amber-200"
+                label="Terkunci — bisa diubah, wajib alasan"
+              />
+              <LegendSwatch className="bg-slate-50 text-slate-400" label="Belum terkunci (isi di tab Isi Langsung)" />
+              <LegendSwatch className="cell-changed" label="Diubah, belum disimpan" />
+              <LegendSwatch className="bg-slate-100" label="Dihitung otomatis" />
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -399,22 +458,24 @@ export default function InputGrid({
           >
             {saving ? 'Menyimpan…' : 'Simpan'}
           </button>
-          <button
-            onClick={submitWeek}
-            disabled={saving || readOnly || alreadySubmitted || dirtyCells.size > 0}
-            title={
-              alreadySubmitted
+          {mode === 'entry' && (
+            <button
+              onClick={submitWeek}
+              disabled={saving || readOnly || alreadySubmitted || dirtyCells.size > 0}
+              title={
+                alreadySubmitted
+                  ? `Minggu ${reportingWeek} sudah di-submit`
+                  : dirtyCells.size > 0
+                    ? 'Simpan dulu perubahan sebelum submit'
+                    : ''
+              }
+              className="rounded-lg border border-emerald-600 px-4 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+            >
+              {alreadySubmitted
                 ? `Minggu ${reportingWeek} sudah di-submit`
-                : dirtyCells.size > 0
-                  ? 'Simpan dulu perubahan sebelum submit'
-                  : ''
-            }
-            className="rounded-lg border border-emerald-600 px-4 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
-          >
-            {alreadySubmitted
-              ? `Minggu ${reportingWeek} sudah di-submit`
-              : `Submit Minggu ${reportingWeek}`}
-          </button>
+                : `Submit Minggu ${reportingWeek}`}
+            </button>
+          )}
         </div>
       </div>
 
