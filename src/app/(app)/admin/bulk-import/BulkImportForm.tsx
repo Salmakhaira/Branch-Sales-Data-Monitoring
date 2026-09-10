@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Branch } from '@/lib/types';
+import { createClient } from '@/lib/supabase/client';
 
 const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -18,23 +19,11 @@ type Result = {
   error?: string;
 };
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Buang prefix "data:...;base64," — hanya bagian base64 murni yang dikirim.
-      resolve(result.split(',')[1] ?? '');
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function BulkImportForm({ branches }: { branches: Branch[] }) {
   const [branchCode, setBranchCode] = useState(branches[0]?.code ?? '');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [branchName, setBranchName] = useState<string | null>(null);
   const [results, setResults] = useState<Result[] | null>(null);
@@ -49,12 +38,31 @@ export default function BulkImportForm({ branches }: { branches: Branch[] }) {
     setError(null);
     setResults(null);
 
+    // FIX (10 September 2026) — file TIDAK lagi dikirim sebagai base64 di
+    // body request (itu yang bikin gagal untuk file >~3MB asli, kena
+    // batas keras 4.5MB milik Vercel Serverless Function). Sekarang file
+    // diupload LANGSUNG dari browser ke Supabase Storage — jalur ini
+    // tidak lewat serverless function sama sekali — dan server tinggal
+    // diberi tahu LOKASINYA saja (path pendek, bukan isi filenya).
+    const supabase = createClient();
+    const storagePath = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
     try {
-      const fileContentBase64 = await fileToBase64(file);
+      setProgress('Mengunggah file ke penyimpanan…');
+      const { error: uploadError } = await supabase.storage
+        .from('bulk-imports')
+        .upload(storagePath, file, { contentType: file.type });
+
+      if (uploadError) {
+        setError(`Gagal upload file: ${uploadError.message}`);
+        return;
+      }
+
+      setProgress('Memproses semua bulan…');
       const res = await fetch('/api/admin/bulk-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branchCode, fileContentBase64 }),
+        body: JSON.stringify({ branchCode, storagePath }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -67,6 +75,7 @@ export default function BulkImportForm({ branches }: { branches: Branch[] }) {
       setError(err?.message ?? 'Terjadi kesalahan tak terduga.');
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -109,7 +118,7 @@ export default function BulkImportForm({ branches }: { branches: Branch[] }) {
           disabled={busy || !branches.length}
           className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {busy ? 'Memproses semua bulan…' : 'Impor Semua Bulan'}
+          {busy ? (progress ?? 'Memproses…') : 'Impor Semua Bulan'}
         </button>
       </form>
 
@@ -122,7 +131,7 @@ export default function BulkImportForm({ branches }: { branches: Branch[] }) {
           </div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-slate-500">
+              <tr className="border-b-2 border-slate-300 text-left text-slate-500">
                 <th className="px-5 py-2 font-medium">Bulan</th>
                 <th className="px-3 py-2 font-medium">Sheet</th>
                 <th className="px-3 py-2 font-medium">Status</th>
