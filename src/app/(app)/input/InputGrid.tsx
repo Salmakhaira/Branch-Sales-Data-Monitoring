@@ -13,7 +13,7 @@ import {
   type Metric,
   type ValueMap,
 } from '@/lib/metrics';
-import { fmtNumber, fmtPercent, parseNumberInput } from '@/lib/format';
+import { fmtWhole, fmtPercent, parseNumberInput } from '@/lib/format';
 import { buildMosHeaderRows, MOS_TOP_TONE, MOS_SUB_TONE } from '@/lib/mos-header';
 import ReasonModal, { type ReasonInput } from '@/components/ReasonModal';
 import type { SaveConflict } from '@/lib/types';
@@ -201,12 +201,15 @@ export default function InputGrid({
 
   function setCell(rowId: string, key: string, raw: string) {
     const parsed = parseNumberInput(raw);
+    // Dibulatkan ke bilangan bulat — semua angka di tabel ini sekarang
+    // sengaja ditampilkan (dan disimpan) tanpa desimal.
+    const rounded = parsed === null ? null : Math.round(parsed);
     if (rowId === 'branch') {
-      setBranchValues((prev) => ({ ...prev, [key]: parsed }));
+      setBranchValues((prev) => ({ ...prev, [key]: rounded }));
     } else {
       setValues((prev) => ({
         ...prev,
-        [rowId]: { ...(prev[rowId] ?? {}), [key]: parsed },
+        [rowId]: { ...(prev[rowId] ?? {}), [key]: rounded },
       }));
     }
   }
@@ -313,7 +316,11 @@ export default function InputGrid({
      * supaya React me-remount elemennya (bukan cuma re-render) setiap kali
      * `justSaved` berubah, dan teks di layar benar-benar ikut ter-reset. */
     const displayRaw = justSaved ? null : raw;
-    const displayText = displayRaw === null || displayRaw === undefined ? '' : String(displayRaw);
+    // Dibulatkan ke bilangan bulat untuk tampilan — termasuk data lama
+    // yang mungkin masih tersimpan dengan desimal (mis. dari Impor
+    // Massal), supaya konsisten dengan aturan "semua angka harus bulat".
+    const displayText =
+      displayRaw === null || displayRaw === undefined ? '' : String(Math.round(displayRaw));
 
     return (
       <td
@@ -529,7 +536,7 @@ export default function InputGrid({
                           dan bisa batal — dia cuma pembacaan hasil hitung,
                           jadi TIDAK ikut logika justSaved lagi, selalu
                           tampilkan nilai aslinya. */}
-                      {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                      {c.format === 'percent' ? fmtPercent(v) : fmtWhole(v)}
                     </td>
                   );
                 }
@@ -553,7 +560,7 @@ export default function InputGrid({
                       <td key={c.key} className="cell-derived">
                         {/* Lihat penjelasan lengkap di baris cabang di atas
                             — kolom turunan tidak lagi ikut logika justSaved. */}
-                        {c.format === 'percent' ? fmtPercent(v) : fmtNumber(v)}
+                        {c.format === 'percent' ? fmtPercent(v) : fmtWhole(v)}
                       </td>
                     );
                   }
@@ -578,7 +585,7 @@ export default function InputGrid({
                       murni hasil agregasi (aggregateRows), tidak pernah
                       diketik langsung, jadi tidak lagi ikut disamarkan
                       oleh justSaved. Lihat penjelasan lengkap di atas. */}
-                  {c.format === 'percent' ? fmtPercent(branchTotal[c.key]) : fmtNumber(branchTotal[c.key])}
+                  {c.format === 'percent' ? fmtPercent(branchTotal[c.key]) : fmtWhole(branchTotal[c.key])}
                 </td>
               ))}
             </tr>
