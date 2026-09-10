@@ -427,7 +427,7 @@ export default function UploadPanel({
             <div className="max-h-96 overflow-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-slate-50">
-                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                  <tr className="border-b-2 border-slate-300 text-left text-[11px] uppercase tracking-wide text-slate-500">
                     <th className="px-5 py-2 font-medium">Salesman</th>
                     <th className="px-3 py-2 font-medium">Kolom</th>
                     <th className="px-3 py-2 text-right font-medium">Sebelum</th>
@@ -538,7 +538,7 @@ function ExcelPreviewTable({
         <thead>
           <tr>
             <th
-              className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-slate-500"
+              className="sticky left-0 top-0 z-30 border-b-2 border-r border-slate-300 bg-slate-50 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-slate-500"
               rowSpan={3}
               style={{ minWidth: 200 }}
             >
@@ -548,7 +548,7 @@ function ExcelPreviewTable({
               <th
                 key={`${g.label}-${i}`}
                 colSpan={g.span}
-                className={`sticky top-0 z-20 whitespace-nowrap px-3 py-1.5 text-left ${
+                className={`sticky top-0 z-20 whitespace-nowrap border-b-2 border-slate-300 px-3 py-1.5 text-left ${
                   MOS_TOP_TONE[g.label] ?? '!bg-slate-100'
                 }`}
               >
@@ -562,7 +562,7 @@ function ExcelPreviewTable({
                 key={`${sh.top}-${sh.label}-${i}`}
                 colSpan={sh.span}
                 rowSpan={sh.hasTier ? 1 : 2}
-                className={`sticky top-6 z-20 whitespace-nowrap px-2 py-1.5 text-center font-normal ${
+                className={`sticky top-6 z-20 whitespace-nowrap border-b-2 border-slate-300 px-2 py-1.5 text-center font-normal ${
                   MOS_SUB_TONE[sh.top] ?? '!bg-slate-50'
                 }`}
                 style={{ minWidth: sh.span === 1 ? 96 : undefined }}
@@ -579,7 +579,7 @@ function ExcelPreviewTable({
                 <th
                   key={c.key}
                   title={`${c.label}${c.excel ? ` (kolom Excel ${c.excel})` : ''}`}
-                  className={`sticky top-[3.25rem] z-20 whitespace-nowrap px-2 py-1.5 text-center font-normal ${
+                  className={`sticky top-[3.25rem] z-20 whitespace-nowrap border-b-2 border-slate-300 px-2 py-1.5 text-center font-normal ${
                     MOS_SUB_TONE[(c.mos ?? { top: c.group }).top] ?? '!bg-slate-50'
                   } ${c.week === reportingWeek ? 'ring-1 ring-inset ring-brand-400' : ''}`}
                   style={{ minWidth: 96 }}
