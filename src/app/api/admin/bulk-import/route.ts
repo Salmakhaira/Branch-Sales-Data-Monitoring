@@ -1,25 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient, getProfile } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { saveEntries } from '@/lib/saveEntries';
 import { parseBranchTemplate, detectMonthSheets } from '@/lib/excel';
 import * as XLSX from 'xlsx';
 
-/* =====================================================================
- *  POST /api/admin/bulk-import
- *
- *  Upload SATU file workbook cabang (berisi banyak sheet bulan, seperti
- *  Sampit.xlsx), sistem otomatis mendeteksi SEMUA sheet yang namanya
- *  cocok pola "BULAN TAHUN" dan mengimpor semuanya sekaligus — supaya
- *  backfill data lama tidak perlu upload manual satu-satu per bulan.
- *
- *  Khusus admin. Memakai jalur validasi yang SAMA PERSIS dengan upload
- *  manual biasa (saveEntries.ts) untuk tiap bulan yang terdeteksi —
- *  bukan jalur pintas terpisah.
- * =================================================================== */
 
 interface BulkImportBody {
   branchCode?: string;
-  fileContentBase64?: string;
+  storagePath?: string;
 }
 
 export const maxDuration = 120; // parsing + simpan banyak bulan sekaligus bisa agak lama
@@ -37,12 +26,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Body tidak valid.' }, { status: 400 });
   }
 
-  const { branchCode, fileContentBase64 } = body;
-  if (!branchCode || !fileContentBase64) {
-    return NextResponse.json({ error: 'branchCode dan fileContentBase64 wajib diisi.' }, { status: 400 });
+  const { branchCode, storagePath } = body;
+  if (!branchCode || !storagePath) {
+    return NextResponse.json({ error: 'branchCode dan storagePath wajib diisi.' }, { status: 400 });
   }
 
   const supabase = createClient();
+  const serviceClient = createServiceClient();
 
   const { data: branch } = await supabase
     .from('branches')
@@ -60,32 +50,40 @@ export async function POST(request: Request) {
     .eq('is_active', true);
   const salesmen = (salesmenRows ?? []).map((s: any) => ({ id: s.id, name: s.name }));
 
-  let buffer: Buffer;
-  try {
-    buffer = Buffer.from(fileContentBase64, 'base64');
-  } catch {
-    return NextResponse.json({ error: 'fileContentBase64 tidak valid.' }, { status: 400 });
+  // Unduh file dari Supabase Storage (server-to-server — tidak kena
+  // batas ukuran body request Vercel sama sekali, beda dengan menerima
+  // isi file langsung dari browser).
+  const { data: fileBlob, error: downloadError } = await serviceClient.storage
+    .from('bulk-imports')
+    .download(storagePath);
+
+  if (downloadError || !fileBlob) {
+    return NextResponse.json(
+      { error: `Gagal mengunduh file dari storage: ${downloadError?.message ?? 'tidak ditemukan'}` },
+      { status: 400 },
+    );
   }
+
+  const arrayBuffer = await fileBlob.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
 
   let wb: XLSX.WorkBook;
   try {
     wb = XLSX.read(buffer, { type: 'buffer' });
   } catch (err: any) {
+    await serviceClient.storage.from('bulk-imports').remove([storagePath]);
     return NextResponse.json({ error: `Gagal membaca file: ${err?.message ?? 'format tidak dikenali'}` }, { status: 400 });
   }
 
   const monthSheets = detectMonthSheets(wb);
   if (monthSheets.length === 0) {
+    await serviceClient.storage.from('bulk-imports').remove([storagePath]);
     return NextResponse.json(
       { error: 'Tidak ada sheet berformat "BULAN TAHUN" yang terdeteksi di file ini.' },
       { status: 400 },
     );
   }
 
-  const arrayBuffer = buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength,
-  ) as ArrayBuffer;
   const results: Array<{
     year: number;
     month: number;
@@ -102,7 +100,7 @@ export async function POST(request: Request) {
   for (const { sheetName, year, month } of monthSheets) {
     try {
       // Cari periode yang sudah ada; buat baru kalau belum ada (mis. bulan
-      // yang belum pernah dibuka lewat ensure_current_current_period()).
+      // yang belum pernah dibuka lewat ensure_current_period()).
       let { data: period } = await supabase
         .from('periods')
         .select('id, year, month')
@@ -174,6 +172,9 @@ export async function POST(request: Request) {
       results.push({ year, month, sheetName, status: 'failed', error: err?.message ?? 'Kesalahan tidak diketahui.' });
     }
   }
+
+  // Bersihkan file transit — sudah tidak dibutuhkan lagi setelah diproses.
+  await serviceClient.storage.from('bulk-imports').remove([storagePath]);
 
   return NextResponse.json({ branch: branch.name, results });
 }
