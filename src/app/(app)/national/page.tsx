@@ -166,7 +166,7 @@ export default async function NationalPage({
                 <th
                   key={`${g.label}-${i}`}
                   colSpan={g.span}
-                  className={`sticky top-0 z-20 whitespace-nowrap border-b-2 border-slate-300 px-3 py-1.5 text-left ${
+                  className={`sticky top-0 z-20 whitespace-nowrap border-b-2 border-r-2 border-slate-300 px-3 py-1.5 text-left ${
                     MOS_TOP_TONE[g.label] ?? '!bg-slate-100'
                   }`}
                 >
@@ -180,7 +180,7 @@ export default async function NationalPage({
                   key={`${sh.top}-${sh.label}-${i}`}
                   colSpan={sh.span}
                   rowSpan={sh.hasTier ? 1 : 2}
-                  className={`sticky top-6 z-20 whitespace-nowrap border-b-2 border-slate-300 px-2 py-1.5 text-center font-normal ${
+                  className={`sticky top-6 z-20 whitespace-nowrap border-b-2 border-r-2 border-slate-300 px-2 py-1.5 text-center font-normal ${
                     MOS_SUB_TONE[sh.top] ?? '!bg-slate-50'
                   }`}
                   style={{ minWidth: sh.span === 1 ? 96 : undefined }}
@@ -197,7 +197,7 @@ export default async function NationalPage({
                   <th
                     key={c.key}
                     title={`${c.label}${c.excel ? ` (kolom Excel ${c.excel})` : ''}`}
-                    className={`sticky top-[3.25rem] z-20 whitespace-nowrap border-b-2 border-slate-300 px-2 py-1.5 text-center font-normal ${
+                    className={`sticky top-[3.25rem] z-20 whitespace-nowrap border-b-2 border-r-2 border-slate-300 px-2 py-1.5 text-center font-normal ${
                       MOS_SUB_TONE[(c.mos ?? { top: c.group }).top] ?? '!bg-slate-50'
                     }`}
                     style={{ minWidth: 96 }}
