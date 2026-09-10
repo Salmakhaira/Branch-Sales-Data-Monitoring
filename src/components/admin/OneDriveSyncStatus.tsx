@@ -79,7 +79,7 @@ export default async function OneDriveSyncStatus() {
 
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
+                <tr className="border-b-2 border-slate-300 text-left text-slate-500">
                   <th className="py-1.5 pr-3 font-medium">Waktu</th>
                   <th className="py-1.5 pr-3 font-medium">Cabang</th>
                   <th className="py-1.5 pr-3 font-medium">File</th>
