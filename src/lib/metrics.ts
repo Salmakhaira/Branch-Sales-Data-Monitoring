@@ -258,10 +258,10 @@ const inputMetrics: Metric[] = [
     kind: 'input',
     scope: 'monthly',
     excel: 'BM',
-    inGrid: true,
+    inGrid: false,
     inNational: false,
     level: 'branch',
-    hint: 'Angka tingkat cabang dari SAP — satu nilai untuk seluruh cabang, bukan per salesman.',
+    hint: 'Angka tingkat cabang dari SAP — satu nilai untuk seluruh cabang, bukan per salesman. Sengaja tidak tersedia untuk diketik manual (Isi Langsung), hanya terisi lewat upload file Excel.',
     mos: { top: 'ACTUAL SALES', sub: 'AMOUNT' },
   },
 ];
