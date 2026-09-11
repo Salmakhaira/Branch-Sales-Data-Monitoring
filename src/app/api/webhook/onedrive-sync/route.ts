@@ -3,30 +3,6 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { saveEntries } from '@/lib/saveEntries';
 import { parseBranchTemplate } from '@/lib/excel';
 
-/* =====================================================================
- *  POST /api/webhook/onedrive-sync
- *
- *  Dipanggil Power Automate setiap kali file MOS cabang berubah di
- *  OneDrive — BUKAN oleh browser, jadi tidak ada sesi login sama sekali.
- *  Otorisasinya lewat header x-webhook-secret, bukan cookie.
- *
- *  Body yang diharapkan (JSON):
- *    {
- *      "branchCode": "SMD-1",
- *      "fileName": "MOS Cabang.xlsx",
- *      "fileContentBase64": "..."
- *    }
- *
- *  Periode diselesaikan OTOMATIS ke bulan berjalan (sama seperti alur
- *  interaktif) — Power Automate tidak perlu tahu apa-apa soal periode.
- *
- *  Perubahan pada angka minggu yang SUDAH TERKUNCI (butuh alasan manusia)
- *  akan DILEWATI, bukan disimpan diam-diam atau gagal total — lihat
- *  src/lib/saveEntries.ts (allowPartialOnConflict). Setiap panggilan,
- *  berhasil maupun gagal, dicatat ke onedrive_sync_runs supaya flow yang
- *  diam-diam berhenti tetap terlihat dari halaman monitoring.
- * =================================================================== */
-
 interface WebhookBody {
   branchCode?: string;
   fileName?: string;
