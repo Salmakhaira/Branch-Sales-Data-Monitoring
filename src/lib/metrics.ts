@@ -1,29 +1,3 @@
-/* =====================================================================
- *  DEFINISI KOLOM MOS  +  MESIN PERHITUNGAN TURUNAN
- *  ---------------------------------------------------------------
- *  File ini adalah "single source of truth". Semua bagian aplikasi
- *  (grid input, parser Excel, rekap nasional, export) membaca dari sini.
- *
- *  Rumus di bawah adalah port 1:1 dari sheet MOS Excel:
- *    AF  TOTAL OL PRTM       = ACT PRTM W(n) + QUOT CONF W(n) >80% + PO NON SAP
- *    AH  BALANCE PRTM        = AF - AG
- *    AJ  TOTAL PO            = ACT PRTM W(n) + PO LAST MONTH by SAP
- *    AK  TOTAL PO OUTLOOK    = AF + PO LAST MONTH by SAP
- *    AT  OL REVENUE          = SUM(AL:AS)
- *    AY  TOTAL OL REVENUE    = SUM(AT:AX)
- *    BN  RATIO ACTUAL        = BM / PLAN SALES
- *
- *  URUTAN KOLOM di seluruh aplikasi mengikuti huruf kolom Excel pada
- *  field `excel` (lihat ORDERED_METRICS di bawah), sehingga susunannya
- *  sama persis dengan sheet MOS aslinya tanpa perlu daftar urutan
- *  terpisah yang gampang ketinggalan.
- *
- *  TIDAK DIPAKAI (dihapus atas permintaan pengguna): AZ TOTAL OL REVENUE
- *  LAST WEEK, BA DEFICIT FROM LAST WEEK, BD RATIO OL/PO. Karena ketiganya
- *  hilang, tidak ada lagi rumus yang butuh nilai snapshot minggu
- *  sebelumnya — itu sebabnya CalcContext hanya berisi `week`.
- * ===================================================================== */
-
 export type MetricKind = 'input' | 'derived';
 export type MetricScope = 'monthly' | 'weekly';
 /** Tingkat pengisian: 'salesman' = diisi per salesman lalu dijumlah;
