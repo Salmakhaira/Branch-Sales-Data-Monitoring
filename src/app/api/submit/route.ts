@@ -2,23 +2,6 @@ import { NextResponse } from 'next/server';
 import { createClient, getProfile } from '@/lib/supabase/server';
 import { jakartaToday, weekOfMonth } from '@/lib/period';
 
-/* =====================================================================
- *  POST /api/submit
- *  Cabang mengunci report untuk satu minggu.
- *
- *  Yang terjadi:
- *   1. Seluruh baris cabang di-copy ke report_snapshots (immutable).
- *   2. Ditandai di branch_submissions.
- *
- *  Minggu boleh dipilih cabang — misalnya menyusul laporan Minggu 2
- *  padahal hari ini sudah Minggu 4. Yang TIDAK boleh: melapor untuk
- *  minggu yang belum tiba pada bulan berjalan.
- *
- *  Setelah submit Minggu N, semua kolom bulanan + kolom mingguan
- *  W1..W(minggu tertinggi yang pernah di-submit) menjadi terkunci:
- *  perubahan berikutnya wajib disertai alasan.
- * =================================================================== */
-
 export async function POST(request: Request) {
   const profile = await getProfile();
   if (!profile) return NextResponse.json({ error: 'Belum login.' }, { status: 401 });
