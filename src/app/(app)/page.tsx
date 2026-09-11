@@ -130,7 +130,7 @@ export default async function SummaryPage({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Stat
           label="Cabang sudah submit"
           value={`${submittedThisWeek} / ${branches.length}`}
@@ -140,12 +140,11 @@ export default async function SummaryPage({
           label="Total OL Revenue"
           value={fmtWhole(national.total_ol_revenue)}
         />
-        {/* RATIO OL/PO sudah dihapus dari daftar kolom, jadi kartu ini
-            diganti TOTAL PO OUTLOOK yang masih ada dan sama informatifnya. */}
-        <Stat
-          label="Total PO Outlook"
-          value={fmtWhole(national.total_po_outlook)}
-        />
+        {/* FIX (10 September 2026) — kartu "Total PO Outlook" dihapus
+            (field-nya sendiri sudah dihapus dari daftar kolom atas
+            permintaan user). Tidak diganti metrik lain — grid disesuaikan
+            jadi 3 kartu, bukan menebak pengganti yang belum tentu
+            diminta. */}
         <Stat
           label="Perubahan perlu ditinjau"
           value={String(openRevisions ?? 0)}
