@@ -1,3 +1,29 @@
+/* =====================================================================
+ *  DEFINISI KOLOM MOS  +  MESIN PERHITUNGAN TURUNAN
+ *  ---------------------------------------------------------------
+ *  File ini adalah "single source of truth". Semua bagian aplikasi
+ *  (grid input, parser Excel, rekap nasional, export) membaca dari sini.
+ *
+ *  Rumus di bawah adalah port 1:1 dari sheet MOS Excel:
+ *    AF  TOTAL OL PRTM       = ACT PRTM W(n) + QUOT CONF W(n) >80% + PO NON SAP
+ *    AH  BALANCE PRTM        = AF - AG
+ *    AJ  TOTAL PO            = ACT PRTM W(n) + PO LAST MONTH by SAP
+ *    AK  TOTAL PO OUTLOOK    = AF + PO LAST MONTH by SAP
+ *    AT  OL REVENUE          = SUM(AL:AS)
+ *    AY  TOTAL OL REVENUE    = SUM(AT:AX)
+ *    BN  RATIO ACTUAL        = BM / PLAN SALES
+ *
+ *  URUTAN KOLOM di seluruh aplikasi mengikuti huruf kolom Excel pada
+ *  field `excel` (lihat ORDERED_METRICS di bawah), sehingga susunannya
+ *  sama persis dengan sheet MOS aslinya tanpa perlu daftar urutan
+ *  terpisah yang gampang ketinggalan.
+ *
+ *  TIDAK DIPAKAI (dihapus atas permintaan pengguna): AZ TOTAL OL REVENUE
+ *  LAST WEEK, BA DEFICIT FROM LAST WEEK, BD RATIO OL/PO. Karena ketiganya
+ *  hilang, tidak ada lagi rumus yang butuh nilai snapshot minggu
+ *  sebelumnya — itu sebabnya CalcContext hanya berisi `week`.
+ * ===================================================================== */
+
 export type MetricKind = 'input' | 'derived';
 export type MetricScope = 'monthly' | 'weekly';
 /** Tingkat pengisian: 'salesman' = diisi per salesman lalu dijumlah;
@@ -76,7 +102,7 @@ const div = (a: number, b: number): number => (b === 0 ? 0 : a / b);
  * null/undefined — bukan sekadar dicek 0, karena 0 bisa berarti "sudah
  * dilaporkan, memang nol", bukan "belum dilaporkan").
  */
-function lastReportedWeek(v: ValueMap, base: string, fallbackWeek: number): number {
+export function lastReportedWeek(v: ValueMap, base: string, fallbackWeek: number): number {
   for (let w = 4; w >= 1; w--) {
     const val = v[`${base}_w${w}`];
     if (val !== null && val !== undefined) return w;
@@ -178,8 +204,8 @@ const inputMetrics: Metric[] = [
     kind: 'input',
     scope: 'monthly',
     excel: 'AG',
-    inGrid: true,
-    inNational: true,
+    inGrid: false,
+    inNational: false,
     level: 'branch',
     hint: 'Angka tingkat cabang — satu nilai untuk seluruh cabang, bukan per salesman.',
     mos: { top: 'OUTLOOK PRTM', sub: 'OL MIN PRTM' },
@@ -203,8 +229,8 @@ const inputMetrics: Metric[] = [
     kind: 'input',
     scope: 'monthly',
     excel: 'AI',
-    inGrid: true,
-    inNational: true,
+    inGrid: false,
+    inNational: false,
     mos: { top: 'OUTLOOK PRTM', sub: 'PO LAST MONTH by SAP' },
   },
 
@@ -268,8 +294,8 @@ const derivedMetrics: Metric[] = [
     kind: 'derived',
     scope: 'monthly',
     excel: 'AH',
-    inGrid: true,
-    inNational: true,
+    inGrid: false,
+    inNational: false,
     level: 'branch',
     hint: 'Butuh OL MIN PRTM (angka tingkat cabang), jadi hanya berarti di baris TOTAL cabang.',
     mos: { top: 'OUTLOOK PRTM', sub: 'BALANCE PRTM (OL - PLAN PRTM)' },
@@ -282,8 +308,8 @@ const derivedMetrics: Metric[] = [
     kind: 'derived',
     scope: 'monthly',
     excel: 'AJ',
-    inGrid: true,
-    inNational: true,
+    inGrid: false,
+    inNational: false,
     mos: { top: 'OUTLOOK PRTM', sub: 'TOTAL PO (POCO+PRTM)' },
     formula: (v, ctx) => {
       const week = lastReportedWeek(v, 'act_prtm', ctx.week);
@@ -297,8 +323,8 @@ const derivedMetrics: Metric[] = [
     kind: 'derived',
     scope: 'monthly',
     excel: 'AK',
-    inGrid: true,
-    inNational: true,
+    inGrid: false,
+    inNational: false,
     mos: { top: 'OUTLOOK PRTM', sub: 'TOTAL PO OUTLOOK' },
     formula: (v, ctx) => calcOne(v, ctx, 'total_ol_prtm') + n(v.po_last_month_sap),
   },
